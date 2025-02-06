@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'api_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:geolocator/geolocator.dart';
+import 'graphhopper_service.dart';
 
 class MapScreen extends StatefulWidget {
   @override
@@ -8,100 +10,246 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  late GoogleMapController mapController;
+  late GoogleMapController _mapController;
+  final TextEditingController _fromController = TextEditingController();
+  final TextEditingController _toController = TextEditingController();
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
-  LatLng _startLocation = LatLng(37.7749, -122.4194); // San Francisco
-  LatLng _endLocation = LatLng(37.7849, -122.4094); // Another point
+  final Set<Polygon> _polygons = {};
+  String _selectedVehicle = 'car';
+  int _selectedTime = 15;
 
-  String _selectedMode = "car"; // Default mode is car
+  LatLng? _startLocation;
+  LatLng? _endLocation;
+  Position? _currentPosition;
+
+  final List<String> vehicleTypes = ['car', 'bike', 'foot'];
+  final List<int> timeOptions = [5, 10, 15, 20, 30];
 
   @override
   void initState() {
     super.initState();
-    _addMarkers();
-    _getPolyline(); // Fetch polyline for default mode
+    _requestLocationPermission();
   }
 
-  void _addMarkers() {
-    _markers.add(Marker(
-      markerId: MarkerId('start'),
-      position: _startLocation,
-      infoWindow: InfoWindow(title: 'Start Location'),
-    ));
-    _markers.add(Marker(
-      markerId: MarkerId('end'),
-      position: _endLocation,
-      infoWindow: InfoWindow(title: 'End Location'),
-    ));
-  }
-
-  Future<void> _getPolyline() async {
-    ApiService apiService = ApiService();
-    try {
-      List<LatLng> points = await apiService.getRouteCoordinates(
-        _startLocation.latitude,
-        _startLocation.longitude,
-        _endLocation.latitude,
-        _endLocation.longitude,
-        _selectedMode, // Pass selected mode (car, bike, foot)
-      );
-
-      setState(() {
-        _polylines.clear();
-        _polylines.add(Polyline(
-          polylineId: PolylineId('route'),
-          points: points,
-          color: Colors.blue,
-          width: 5,
-        ));
-      });
-    } catch (e) {
-      print('Error fetching polyline: $e');
+  // Request location permission
+  Future<void> _requestLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.deniedForever) {
+        return;
+      }
     }
+    _getCurrentLocation();
   }
 
-  void _onMapCreated(GoogleMapController controller) {
-    mapController = controller;
+  // Get current location
+  Future<void> _getCurrentLocation() async {
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    setState(() {
+      _currentPosition = position;
+      _startLocation = LatLng(position.latitude, position.longitude);
+      _markers.add(Marker(
+        markerId: MarkerId('currentLocation'),
+        position: _startLocation!,
+        infoWindow: InfoWindow(title: "Your Location"),
+      ));
+      _mapController.animateCamera(
+        CameraUpdate.newLatLngZoom(_startLocation!, 14),
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('GraphHopper Dynamic Routes')),
+      appBar: AppBar(title: Text("GraphHopper Route Finder")),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text("Select Mode: "),
-                DropdownButton<String>(
-                  value: _selectedMode,
-                  items: ["car", "bike", "foot"].map((mode) {
-                    return DropdownMenuItem<String>(
-                      value: mode,
-                      child: Text(mode.toUpperCase()),
-                    );
-                  }).toList(),
-                  onChanged: (newValue) {
-                    setState(() {
-                      _selectedMode = newValue!;
-                      _getPolyline(); // Refresh route based on new mode
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: GoogleMap(
-              onMapCreated: _onMapCreated,
-              initialCameraPosition: CameraPosition(target: _startLocation, zoom: 12),
-              markers: _markers,
-              polylines: _polylines,
-            ),
+          _buildSearchSection(),
+          Expanded(child: _buildGoogleMap()),
+          _buildActionButtons(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchSection() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          _buildTextField(_fromController, "From...", true),
+          SizedBox(height: 8),
+          _buildTextField(_toController, "To...", false),
+          SizedBox(height: 8),
+          _buildVehicleDropdown(),
+          SizedBox(height: 8),
+          _buildIsochroneControls(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint, bool isStart) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        hintText: hint,
+        suffixIcon: IconButton(
+          icon: Icon(Icons.search),
+          onPressed: () => _searchLocation(controller.text, isStart),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVehicleDropdown() {
+    return DropdownButton<String>(
+      value: _selectedVehicle,
+      onChanged: (value) {
+        setState(() => _selectedVehicle = value!);
+      },
+      items: vehicleTypes.map((type) {
+        return DropdownMenuItem(value: type, child: Text(type.toUpperCase()));
+      }).toList(),
+    );
+  }
+
+  Widget _buildIsochroneControls() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        DropdownButton<int>(
+          value: _selectedTime,
+          onChanged: (value) {
+            setState(() => _selectedTime = value!);
+          },
+          items: timeOptions.map((time) {
+            return DropdownMenuItem(value: time, child: Text("$time min"));
+          }).toList(),
+        ),
+        ElevatedButton(
+          onPressed: _fetchIsochrone,
+          child: Text("Find Reachable Area"),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGoogleMap() {
+    return GoogleMap(
+      onMapCreated: (controller) => _mapController = controller,
+      initialCameraPosition: CameraPosition(
+        target: LatLng(10.7769, 106.7009),
+        zoom: 12,
+      ),
+      markers: _markers,
+      polylines: _polylines,
+      polygons: _polygons,
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        ElevatedButton(
+          onPressed: _fetchRoute,
+          child: Text("Find Route"),
+        ),
+        ElevatedButton(
+          onPressed: _showTurnByTurnNavigation,
+          child: Text("Turn-by-Turn"),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _searchLocation(String query, bool isStart) async {
+    if (query.isEmpty) return;
+
+    LatLng? location = await GraphHopperService().getCoordinates(query);
+
+    if (location != null) {
+      setState(() {
+        if (isStart) {
+          _startLocation = location;
+          _markers.add(Marker(markerId: MarkerId('start'), position: location));
+        } else {
+          _endLocation = location;
+          _markers.add(Marker(markerId: MarkerId('end'), position: location));
+        }
+        _mapController.animateCamera(CameraUpdate.newLatLngZoom(location, 14));
+      });
+    }
+  }
+
+  Future<void> _fetchRoute() async {
+    if (_startLocation == null || _endLocation == null) return;
+
+    List<LatLng> route = await GraphHopperService().getRoute(
+      _startLocation!,
+      _endLocation!,
+      _selectedVehicle,
+    );
+
+    setState(() {
+      _polylines.clear();
+      _polylines.add(Polyline(
+        polylineId: PolylineId('route'),
+        points: route,
+        color: Colors.blue,
+        width: 5,
+      ));
+    });
+  }
+
+  Future<void> _fetchIsochrone() async {
+    if (_startLocation == null) return;
+
+    List<LatLng> area = await GraphHopperService().getReachableArea(
+      _startLocation!,
+      _selectedTime,
+      _selectedVehicle,
+    );
+
+    setState(() {
+      _polygons.clear();
+      _polygons.add(Polygon(
+        polygonId: PolygonId('isochrone'),
+        points: area,
+        strokeColor: Colors.red,
+        strokeWidth: 2,
+        fillColor: Colors.red.withOpacity(0.3),
+      ));
+    });
+  }
+
+  Future<void> _showTurnByTurnNavigation() async {
+    if (_startLocation == null || _endLocation == null) return;
+
+    List<String> instructions = await GraphHopperService().getNavigationInstructions(
+      _startLocation!,
+      _endLocation!,
+      _selectedVehicle,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Turn-by-Turn Navigation"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: instructions.map((step) => Text(step)).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Close"),
           ),
         ],
       ),
