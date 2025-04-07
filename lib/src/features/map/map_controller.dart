@@ -13,6 +13,7 @@ class MapController {
   void onMapCreated(GoogleMapController controller) {
     _mapController = controller;
     _setMapStyle();
+    _fitCameraMarkers(); // Fit map to show all camera markers initially
   }
 
   Future<void> onFromSelected(BuildContext context) async {
@@ -61,6 +62,9 @@ class MapController {
 
   void onStartNavigation() {
     model.toggleNavigation();
+    if (model.isNavigating && model.polylines.isNotEmpty) {
+      _updateMapCamera();
+    }
   }
 
   void onFollowToggle() {
@@ -99,6 +103,18 @@ class MapController {
   void _updateMapCamera() {
     if (model.polylines.isNotEmpty) {
       final bounds = _computeBounds(model.polylines.first.points);
+      _mapController.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+    }
+  }
+
+  void _fitCameraMarkers() {
+    if (model.cameraMarkers.isNotEmpty) {
+      final lats = model.cameraMarkers.map((m) => m.position.latitude).toList();
+      final lngs = model.cameraMarkers.map((m) => m.position.longitude).toList();
+      final bounds = LatLngBounds(
+        southwest: LatLng(lats.reduce((a, b) => a < b ? a : b), lngs.reduce((a, b) => a < b ? a : b)),
+        northeast: LatLng(lats.reduce((a, b) => a > b ? a : b), lngs.reduce((a, b) => a > b ? a : b)),
+      );
       _mapController.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
     }
   }

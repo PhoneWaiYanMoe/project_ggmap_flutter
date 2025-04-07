@@ -1,9 +1,14 @@
+// lib/src/features/map/map_view.dart
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'map_model.dart';
 import 'map_controller.dart';
+import '../../features/auth/login_screen.dart';
 import '../../features/search/search_screen.dart';
 import '../../services/graphhopper_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart'; // Added for sharing
+import 'dart:io'; // Added for File
 
 class MapView extends StatelessWidget {
   final MapModel model;
@@ -21,10 +26,11 @@ class MapView extends StatelessWidget {
             GoogleMap(
               onMapCreated: controller.onMapCreated,
               initialCameraPosition: CameraPosition(
-                target: LatLng(10.7769, 106.7009),
+                target: LatLng(10.7769, 106.7009), // Ho Chi Minh City center
                 zoom: 12,
               ),
               markers: {
+                // From and To markers
                 if (model.fromLocation != null)
                   Marker(
                     markerId: MarkerId('fromLocation'),
@@ -39,6 +45,8 @@ class MapView extends StatelessWidget {
                     icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
                     infoWindow: InfoWindow(title: "To: ${model.toPlaceName}"),
                   ),
+                // Camera markers
+                ...model.cameraMarkers,
               },
               polylines: model.polylines,
               myLocationEnabled: true,
@@ -224,6 +232,40 @@ class MapView extends StatelessWidget {
             mini: true,
             onPressed: controller.onMyLocation,
             child: Icon(Icons.my_location),
+          ),
+          SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: "share", // New share button
+            mini: true,
+            onPressed: () async {
+              final filePath = await model.getCameraDistancesFilePath();
+              final file = File(filePath);
+              if (await file.exists()) {
+                await Share.shareXFiles(
+                  [XFile(filePath)],
+                  text: 'Here are the camera distances',
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Camera distances file not found!')),
+                );
+              }
+            },
+            child: Icon(Icons.share),
+          ),
+          SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: "logout",
+            mini: true,
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('token');
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => LoginScreen()),
+              );
+            },
+            child: Icon(Icons.logout),
           ),
         ],
       ),
