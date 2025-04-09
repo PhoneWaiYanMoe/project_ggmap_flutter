@@ -7,8 +7,8 @@ import '../../features/auth/login_screen.dart';
 import '../../features/search/search_screen.dart';
 import '../../services/graphhopper_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:share_plus/share_plus.dart'; // Added for sharing
-import 'dart:io'; // Added for File
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
 
 class MapView extends StatelessWidget {
   final MapModel model;
@@ -30,7 +30,6 @@ class MapView extends StatelessWidget {
                 zoom: 12,
               ),
               markers: {
-                // From and To markers
                 if (model.fromLocation != null)
                   Marker(
                     markerId: MarkerId('fromLocation'),
@@ -45,7 +44,6 @@ class MapView extends StatelessWidget {
                     icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
                     infoWindow: InfoWindow(title: "To: ${model.toPlaceName}"),
                   ),
-                // Camera markers
                 ...model.cameraMarkers,
               },
               polylines: model.polylines,
@@ -67,6 +65,7 @@ class MapView extends StatelessWidget {
                   if (model.isNavigating) _buildNavigationHeader(context),
                   const Spacer(),
                   if (model.toLocation != null) _buildDirectionSection(context),
+                  if (model.shortestPath.isNotEmpty) _buildShortestPathInfo(context),
                 ],
               ),
             ),
@@ -210,7 +209,7 @@ class MapView extends StatelessWidget {
   Widget _buildMapControls(BuildContext context) {
     return Positioned(
       right: 16,
-      bottom: model.toLocation != null ? 200 : 16,
+      bottom: model.shortestPath.isNotEmpty ? 200 : (model.toLocation != null ? 200 : 16),
       child: Column(
         children: [
           FloatingActionButton(
@@ -235,7 +234,7 @@ class MapView extends StatelessWidget {
           ),
           SizedBox(height: 8),
           FloatingActionButton(
-            heroTag: "share", // New share button
+            heroTag: "shareDistances",
             mini: true,
             onPressed: () async {
               final filePath = await model.getCameraDistancesFilePath();
@@ -247,11 +246,51 @@ class MapView extends StatelessWidget {
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Camera distances file not found!')),
+                  SnackBar(content: Text('Distances file not found!')),
                 );
               }
             },
             child: Icon(Icons.share),
+          ),
+          SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: "shareSpeeds",
+            mini: true,
+            onPressed: () async {
+              final filePath = await model.getCameraSpeedsFilePath();
+              final file = File(filePath);
+              if (await file.exists()) {
+                await Share.shareXFiles(
+                  [XFile(filePath)],
+                  text: 'Here are the camera speeds',
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Speeds file not found!')),
+                );
+              }
+            },
+            child: Icon(Icons.speed),
+          ),
+          SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: "sharePath",
+            mini: true,
+            onPressed: () async {
+              final filePath = await model.getShortestPathFilePath();
+              final file = File(filePath);
+              if (await file.exists()) {
+                await Share.shareXFiles(
+                  [XFile(filePath)],
+                  text: 'Here is the shortest path',
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Shortest path file not found!')),
+                );
+              }
+            },
+            child: Icon(Icons.route),
           ),
           SizedBox(height: 8),
           FloatingActionButton(
@@ -267,6 +306,19 @@ class MapView extends StatelessWidget {
             },
             child: Icon(Icons.logout),
           ),
+          // In _buildMapControls, add this before the "sharePath" button:
+FloatingActionButton(
+  heroTag: "regenPath",
+  mini: true,
+  onPressed: () async {
+    await model.regenerateShortestPath();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Shortest path recalculated')),
+    );
+  },
+  child: Icon(Icons.refresh),
+),
+SizedBox(height: 8),
         ],
       ),
     );
@@ -364,6 +416,36 @@ class MapView extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShortestPathInfo(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "Shortest Path by Time",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8),
+          Text(
+            "Path: ${model.shortestPath.join(" -> ")}",
+            style: TextStyle(fontSize: 16),
+          ),
+          Text(
+            "Total Time: ${model.totalTravelTime.toStringAsFixed(2)} minutes",
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
         ],
       ),
