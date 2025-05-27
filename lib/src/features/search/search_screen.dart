@@ -14,7 +14,7 @@ class SearchLocation {
 class SearchScreen extends StatefulWidget {
   final LatLng? currentLocation;
 
-  SearchScreen({required this.currentLocation});
+  const SearchScreen({super.key, required this.currentLocation});
 
   @override
   _SearchScreenState createState() => _SearchScreenState();
@@ -77,7 +77,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,

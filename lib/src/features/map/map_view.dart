@@ -1,4 +1,3 @@
-// lib/src/features/map/map_view.dart
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'map_model.dart';
@@ -9,63 +8,89 @@ import '../../services/graphhopper_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
+import '../../widgets/vietnam_weather_widget.dart';
+import '../../widgets/compact_weather_icon.dart';
+import '../../services/vietnam_weather_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-class MapView extends StatelessWidget {
+class MapView extends StatefulWidget {
   final MapModel model;
   final MapController controller;
 
-  const MapView({required this.model, required this.controller});
+  const MapView({super.key, required this.model, required this.controller});
 
+  @override
+  _MapViewState createState() => _MapViewState();
+}
+
+class _MapViewState extends State<MapView> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: model,
+      animation: widget.model,
       builder: (context, _) => Scaffold(
         body: Stack(
           children: [
             GoogleMap(
-              onMapCreated: controller.onMapCreated,
+              onMapCreated: widget.controller.onMapCreated,
               initialCameraPosition: CameraPosition(
-                target: LatLng(10.7769, 106.7009), // Ho Chi Minh City center
+                target: LatLng(10.7769, 106.7009),
                 zoom: 12,
               ),
               markers: {
-                if (model.fromLocation != null)
+                if (widget.model.fromLocation != null)
                   Marker(
                     markerId: MarkerId('fromLocation'),
-                    position: model.fromLocation!,
+                    position: widget.model.fromLocation!,
                     icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-                    infoWindow: InfoWindow(title: "From: ${model.fromPlaceName}"),
+                    infoWindow: InfoWindow(title: "From: ${widget.model.fromPlaceName}"),
                   ),
-                if (model.toLocation != null)
+                if (widget.model.toLocation != null)
                   Marker(
                     markerId: MarkerId('toLocation'),
-                    position: model.toLocation!,
+                    position: widget.model.toLocation!,
                     icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                    infoWindow: InfoWindow(title: "To: ${model.toPlaceName}"),
+                    infoWindow: InfoWindow(title: "To: ${widget.model.toPlaceName}"),
                   ),
-                ...model.cameraMarkers,
+                ...widget.model.cameraMarkers,
               },
-              polylines: model.polylines,
+              polylines: widget.model.polylines,
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
               compassEnabled: true,
               onCameraMove: (_) {
-                if (model.followUser && !model.isNavigating) {
-                  controller.onFollowToggle();
+                if (widget.model.followUser && !widget.model.isNavigating) {
+                  widget.controller.onFollowToggle();
                 }
               },
             ),
+
+            // Compact Weather Icon - Top Right
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              right: 16,
+              child: CompactWeatherIcon(
+                currentWeather: widget.model.currentWeather,
+                drivingConditions: widget.model.drivingConditions,
+                warnings: widget.model.weatherWarnings,
+                onTap: () => _showDetailedWeather(context),
+                onRefresh: () => widget.model.fetchWeatherData(),
+              ),
+            ),
+
             SafeArea(
               child: Column(
                 children: [
+                  SizedBox(height: 16), // Space for weather icon
                   _buildSearchSection(context),
-                  if (model.isNavigating) _buildNavigationHeader(context),
+                  _buildDataSourceBanner(context),
+                  if (widget.model.isNavigating) _buildNavigationHeader(context),
                   const Spacer(),
-                  if (model.toLocation != null) _buildDirectionSection(context),
-                  if (model.shortestPath.isNotEmpty) _buildShortestPathInfo(context),
+                  if (widget.model.toLocation != null) _buildDirectionSection(context),
+                  if (widget.model.shortestPath.isNotEmpty) _buildShortestPathInfo(context),
+                  if (widget.model.isNavigating) _buildTurnByTurnButton(context),
                 ],
               ),
             ),
@@ -89,16 +114,42 @@ class MapView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (!model.showTwoSearchBars)
+          if (!widget.model.showTwoSearchBars)
             _buildSingleSearchBar(context)
           else
             Column(
               children: [
-                _buildSearchField(context, "From", model.fromPlaceName, true),
+                _buildSearchField(context, "From", widget.model.fromPlaceName, true),
                 Divider(height: 1),
-                _buildSearchField(context, "To", model.toPlaceName, false),
+                _buildSearchField(context, "To", widget.model.toPlaceName, false),
               ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataSourceBanner(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: widget.model.usingLiveData ? Colors.green.withOpacity(0.9) : Colors.red.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              widget.model.usingLiveData ? "Using Live Data" : "No Live Data (API Unavailable)",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -108,7 +159,7 @@ class MapView extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => controller.onToSelected(context),
+        onTap: () => widget.controller.onToSelected(context),
         child: Padding(
           padding: EdgeInsets.all(16),
           child: Row(
@@ -130,7 +181,7 @@ class MapView extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => isFrom ? controller.onFromSelected(context) : controller.onToSelected(context),
+        onTap: () => isFrom ? widget.controller.onFromSelected(context) : widget.controller.onToSelected(context),
         child: Padding(
           padding: EdgeInsets.all(16),
           child: Row(
@@ -185,20 +236,20 @@ class MapView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Route from ${model.fromPlaceName}",
+                  "Route from ${widget.model.fromPlaceName}",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                if (model.estimatedArrival != null)
+                if (widget.model.estimatedArrival != null)
                   Text(
-                    "ETA: ${model.estimatedArrival!.hour}:${model.estimatedArrival!.minute.toString().padLeft(2, '0')}",
+                    "ETA: ${widget.model.estimatedArrival!.hour}:${widget.model.estimatedArrival!.minute.toString().padLeft(2, '0')}",
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
               ],
             ),
           ),
           IconButton(
-            icon: Icon(model.followUser ? Icons.gps_fixed : Icons.gps_not_fixed),
-            onPressed: controller.onFollowToggle,
+            icon: Icon(widget.model.followUser ? Icons.gps_fixed : Icons.gps_not_fixed),
+            onPressed: widget.controller.onFollowToggle,
             color: Theme.of(context).primaryColor,
           ),
         ],
@@ -209,80 +260,59 @@ class MapView extends StatelessWidget {
   Widget _buildMapControls(BuildContext context) {
     return Positioned(
       right: 16,
-      bottom: model.shortestPath.isNotEmpty ? 200 : (model.toLocation != null ? 200 : 16),
+      bottom: widget.model.shortestPath.isNotEmpty || widget.model.isNavigating ? 250 : (widget.model.toLocation != null ? 200 : 16),
       child: Column(
         children: [
           FloatingActionButton(
             heroTag: "zoomIn",
             mini: true,
-            onPressed: controller.onZoomIn,
+            onPressed: widget.controller.onZoomIn,
             child: Icon(Icons.add),
           ),
           SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "zoomOut",
             mini: true,
-            onPressed: controller.onZoomOut,
+            onPressed: widget.controller.onZoomOut,
             child: Icon(Icons.remove),
           ),
           SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "location",
             mini: true,
-            onPressed: controller.onMyLocation,
+            onPressed: widget.controller.onMyLocation,
             child: Icon(Icons.my_location),
           ),
           SizedBox(height: 8),
           FloatingActionButton(
-            heroTag: "shareDistances",
+            heroTag: "startNav",
             mini: true,
-            onPressed: () async {
-              final filePath = await model.getCameraDistancesFilePath();
-              final file = File(filePath);
-              if (await file.exists()) {
-                await Share.shareXFiles(
-                  [XFile(filePath)],
-                  text: 'Here are the camera distances',
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Distances file not found!')),
-                );
-              }
-            },
-            child: Icon(Icons.share),
+            onPressed: () => widget.controller.onStartNavigation(),
+            child: Icon(Icons.play_arrow),
           ),
           SizedBox(height: 8),
           FloatingActionButton(
-            heroTag: "shareSpeeds",
+            heroTag: "regenPath",
             mini: true,
             onPressed: () async {
-              final filePath = await model.getCameraSpeedsFilePath();
-              final file = File(filePath);
-              if (await file.exists()) {
-                await Share.shareXFiles(
-                  [XFile(filePath)],
-                  text: 'Here are the camera speeds',
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Speeds file not found!')),
-                );
-              }
+              await widget.model.regenerateShortestPath();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Shortest path recalculated at ${DateTime.now()}')),
+              );
             },
-            child: Icon(Icons.speed),
+            child: Icon(Icons.refresh),
           ),
           SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "sharePath",
             mini: true,
             onPressed: () async {
-              final filePath = await model.getShortestPathFilePath();
+              final filePath = await widget.model.getShortestPathFilePath();
               final file = File(filePath);
               if (await file.exists()) {
                 await Share.shareXFiles(
                   [XFile(filePath)],
-                  text: 'Here is the shortest path',
+                  text: 'Here is the shortest path at ${DateTime.now()}',
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -292,33 +322,6 @@ class MapView extends StatelessWidget {
             },
             child: Icon(Icons.route),
           ),
-          SizedBox(height: 8),
-          FloatingActionButton(
-            heroTag: "logout",
-            mini: true,
-            onPressed: () async {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('token');
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => LoginScreen()),
-              );
-            },
-            child: Icon(Icons.logout),
-          ),
-          // In _buildMapControls, add this before the "sharePath" button:
-FloatingActionButton(
-  heroTag: "regenPath",
-  mini: true,
-  onPressed: () async {
-    await model.regenerateShortestPath();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Shortest path recalculated')),
-    );
-  },
-  child: Icon(Icons.refresh),
-),
-SizedBox(height: 8),
         ],
       ),
     );
@@ -344,75 +347,19 @@ SizedBox(height: 8),
               Expanded(
                 child: Row(
                   children: [
-                    Icon(
-                      model.selectedVehicle == 'car'
-                          ? Icons.directions_car
-                          : model.selectedVehicle == 'bike'
-                              ? Icons.directions_bike
-                              : Icons.directions_walk,
-                      color: Theme.of(context).primaryColor,
-                      size: 28,
-                    ),
                     SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          model.distance != null
-                              ? "${model.distance!.toStringAsFixed(2)} km"
+                          widget.model.distance != null
+                              ? "${widget.model.distance!.toStringAsFixed(2)} km"
                               : "Calculating...",
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                        if (model.estimatedArrival != null)
-                          Text(
-                            "ETA: ${model.estimatedArrival!.hour}:${model.estimatedArrival!.minute.toString().padLeft(2, '0')}",
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                          ),
                       ],
                     ),
                   ],
-                ),
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    _buildVehicleButton(context, 'car', Icons.directions_car),
-                    _buildVehicleButton(context, 'bike', Icons.directions_bike),
-                    _buildVehicleButton(context, 'foot', Icons.directions_walk),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: controller.onStartNavigation,
-                  icon: Icon(Icons.directions),
-                  label: Text(model.isNavigating ? "Stop Navigation" : "Start Navigation"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: 8),
-              IconButton(
-                onPressed: () => _showTurnByTurnNavigation(context),
-                icon: Icon(Icons.list),
-                tooltip: "Turn-by-Turn",
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.grey[200],
                 ),
               ),
             ],
@@ -423,6 +370,8 @@ SizedBox(height: 8),
   }
 
   Widget _buildShortestPathInfo(BuildContext context) {
+    final startCamera = widget.model.fromLocation != null ? widget.model.findNearestCamera(widget.model.fromLocation!) : 'Unknown';
+    final endCamera = widget.model.toLocation != null ? widget.model.findNearestCamera(widget.model.toLocation!) : 'Unknown';
     return Container(
       margin: EdgeInsets.all(16),
       padding: EdgeInsets.all(16),
@@ -435,16 +384,16 @@ SizedBox(height: 8),
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            "Shortest Path by Time",
+            "Shortest Path from $startCamera to $endCamera",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           SizedBox(height: 8),
           Text(
-            "Path: ${model.shortestPath.join(" -> ")}",
+            "Path: ${widget.model.shortestPath.join(" -> ")}",
             style: TextStyle(fontSize: 16),
           ),
           Text(
-            "Total Time: ${model.totalTravelTime.toStringAsFixed(2)} minutes",
+            "Total Time: ${widget.model.totalTravelTime.toStringAsFixed(2)} minutes",
             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
         ],
@@ -452,43 +401,36 @@ SizedBox(height: 8),
     );
   }
 
-  Widget _buildVehicleButton(BuildContext context, String vehicle, IconData icon) {
-    bool isSelected = model.selectedVehicle == vehicle;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => controller.onVehicleSelected(vehicle),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: isSelected ? Colors.white : Colors.grey[600],
-            size: 24,
-          ),
+  Widget _buildTurnByTurnButton(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ElevatedButton(
+        onPressed: () => _showTurnByTurnNavigation(context),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Theme.of(context).primaryColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Text(
+          "Show Turn-by-Turn",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
     );
   }
 
   Future<void> _showTurnByTurnNavigation(BuildContext context) async {
-    if (model.fromLocation == null || model.toLocation == null) return;
+    if (widget.model.fromLocation == null || widget.model.toLocation == null) return;
 
     List<String> instructions = await GraphHopperService().getNavigationInstructions(
-      model.fromLocation!,
-      model.toLocation!,
-      model.selectedVehicle,
+      widget.model.fromLocation!,
+      widget.model.toLocation!,
+      widget.model.selectedVehicle,
     );
 
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -501,29 +443,23 @@ SizedBox(height: 8),
               child: Row(
                 children: [
                   Icon(
-                    model.selectedVehicle == 'car'
+                    widget.model.selectedVehicle == 'car'
                         ? Icons.directions_car
-                        : model.selectedVehicle == 'bike'
-                            ? Icons.directions_bike
-                            : Icons.directions_walk,
+                        : widget.model.selectedVehicle == 'bike'
+                        ? Icons.directions_bike
+                        : Icons.directions_walk,
                     color: Colors.white,
                   ),
                   SizedBox(width: 12),
                   Text(
                     "Turn-by-Turn Navigation",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
             ),
             Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.6,
-              ),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -531,9 +467,7 @@ SizedBox(height: 8),
                     int index = entry.key + 1;
                     String step = entry.value;
                     return Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[200]!, width: 1),
-                      ),
+                      decoration: BoxDecoration(border: Border.all(color: Colors.grey[200]!, width: 1)),
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Theme.of(context).primaryColor,
@@ -553,14 +487,357 @@ SizedBox(height: 8),
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(foregroundColor: Theme.of(context).primaryColor),
                     child: Text("Close"),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Theme.of(context).primaryColor,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Weather Detail Modal
+  void _showDetailedWeather(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header with refresh button
+            Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Chi tiết thời tiết',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.refresh),
+                    onPressed: () {
+                      widget.model.fetchWeatherData();
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    if (widget.model.currentWeather != null) ...[
+                      _buildCurrentWeatherCard(),
+                      SizedBox(height: 16),
+                      _buildAirQualityCard(),
+                      SizedBox(height: 16),
+                      _buildDrivingConditionsCard(),
+                    ] else
+                      Center(
+                        child: Column(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text('Đang tải thông tin thời tiết...'),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentWeatherCard() {
+    final current = widget.model.currentWeather!['current'];
+    final location = widget.model.currentWeather!['location'];
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (current['condition_icon'] != null)
+                  CachedNetworkImage(
+                    imageUrl: current['condition_icon'],
+                    width: 64,
+                    height: 64,
+                    placeholder: (context, url) => CircularProgressIndicator(),
+                    errorWidget: (context, url, error) => Icon(Icons.wb_sunny, size: 64),
+                  ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${location['name']}',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '${current['condition']}',
+                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                      ),
+                      Text(
+                        '${current['temp_c']}°C',
+                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Divider(),
+            SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildWeatherDetailItem('Cảm giác như', '${current['feelslike_c']}°C', Icons.thermostat),
+                _buildWeatherDetailItem('Độ ẩm', '${current['humidity']}%', Icons.water_drop),
+                _buildWeatherDetailItem('Gió', '${current['wind_kph']} km/h', Icons.air),
+              ],
+            ),
+            SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildWeatherDetailItem('Tầm nhìn', '${current['vis_km']} km', Icons.visibility),
+                _buildWeatherDetailItem('UV Index', '${current['uv']}', Icons.wb_sunny),
+                _buildWeatherDetailItem('Áp suất', '${current['pressure_mb']} mb', Icons.speed),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeatherDetailItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.blue, size: 24),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
+        Text(
+          value,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAirQualityCard() {
+    final airQuality = widget.model.currentWeather!['air_quality'];
+    if (airQuality == null) return SizedBox.shrink();
+
+    final usEpaIndex = airQuality['us_epa_index'] ?? 1;
+    String aqiText = '';
+    Color aqiColor = Colors.green;
+
+    switch (usEpaIndex) {
+      case 1:
+        aqiText = 'Tốt';
+        aqiColor = Colors.green;
+        break;
+      case 2:
+        aqiText = 'Trung bình';
+        aqiColor = Colors.yellow;
+        break;
+      case 3:
+        aqiText = 'Không tốt cho nhóm nhạy cảm';
+        aqiColor = Colors.orange;
+        break;
+      case 4:
+        aqiText = 'Không tốt';
+        aqiColor = Colors.red;
+        break;
+      case 5:
+        aqiText = 'Rất không tốt';
+        aqiColor = Colors.purple;
+        break;
+      case 6:
+        aqiText = 'Nguy hiểm';
+        aqiColor = Colors.red.shade900;
+        break;
+    }
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.air, color: aqiColor),
+                SizedBox(width: 8),
+                Text(
+                  'Chất lượng không khí',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: aqiColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: aqiColor),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: aqiColor,
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    aqiText,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: aqiColor,
                     ),
                   ),
                 ],
               ),
             ),
+            SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildAQIItem('PM2.5', '${airQuality['pm2_5']}'),
+                _buildAQIItem('PM10', '${airQuality['pm10']}'),
+                _buildAQIItem('NO2', '${airQuality['no2']}'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAQIItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
+        Text(
+          value,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          'μg/m³',
+          style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDrivingConditionsCard() {
+    if (widget.model.drivingConditions == null) return SizedBox.shrink();
+
+    final conditions = widget.model.drivingConditions!;
+    final safe = conditions['safe'] ?? true;
+    final warnings = List<String>.from(conditions['warnings'] ?? []);
+    final recommendations = List<String>.from(conditions['recommendations'] ?? []);
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  safe ? Icons.check_circle : Icons.warning,
+                  color: safe ? Colors.green : Colors.red,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Điều kiện lái xe',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: (safe ? Colors.green : Colors.red).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: safe ? Colors.green : Colors.red),
+              ),
+              child: Text(
+                safe ? 'An toàn để lái xe' : 'Cẩn thận khi lái xe',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: safe ? Colors.green : Colors.red,
+                ),
+              ),
+            ),
+            if (warnings.isNotEmpty) ...[
+              SizedBox(height: 16),
+              Text('⚠️ Cảnh báo:', style: TextStyle(fontWeight: FontWeight.bold)),
+              ...warnings.map((warning) => Padding(
+                padding: EdgeInsets.only(left: 16, top: 4),
+                child: Text('• $warning'),
+              )),
+            ],
+            if (recommendations.isNotEmpty) ...[
+              SizedBox(height: 16),
+              Text('💡 Khuyến nghị:', style: TextStyle(fontWeight: FontWeight.bold)),
+              ...recommendations.map((rec) => Padding(
+                padding: EdgeInsets.only(left: 16, top: 4),
+                child: Text('• $rec'),
+              )),
+            ],
           ],
         ),
       ),

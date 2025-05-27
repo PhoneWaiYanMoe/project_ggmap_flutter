@@ -1,0 +1,2 @@
+D:/TDTUStudy/TrafficJam project 2024-2025/Codes/MobileApp/project_ggmap_flutter/android/app/.cxx/Debug/i2p4a116/x86/CMakeFiles/edit_cache.dir
+D:/TDTUStudy/TrafficJam project 2024-2025/Codes/MobileApp/project_ggmap_flutter/android/app/.cxx/Debug/i2p4a116/x86/CMakeFiles/rebuild_cache.dir

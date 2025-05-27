@@ -1,4 +1,3 @@
-// lib/src/features/map/map_controller.dart
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'map_model.dart';
@@ -13,7 +12,7 @@ class MapController {
   void onMapCreated(GoogleMapController controller) {
     _mapController = controller;
     _setMapStyle();
-    _fitCameraMarkers(); // Fit map to show all camera markers initially
+    _fitCameraMarkers();
   }
 
   Future<void> onFromSelected(BuildContext context) async {
@@ -60,8 +59,8 @@ class MapController {
     }
   }
 
-  void onStartNavigation() {
-    model.toggleNavigation();
+  Future<void> onStartNavigation() async {
+    await model.toggleNavigation();
     if (model.isNavigating && model.polylines.isNotEmpty) {
       _updateMapCamera();
     }
@@ -104,6 +103,9 @@ class MapController {
     if (model.polylines.isNotEmpty) {
       final bounds = _computeBounds(model.polylines.first.points);
       _mapController.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+    } else if (model.fromLocation != null && model.toLocation != null) {
+      final bounds = _computeBounds([model.fromLocation!, model.toLocation!]);
+      _mapController.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
     }
   }
 
@@ -131,10 +133,7 @@ class MapController {
       if (point.longitude < minLng) minLng = point.longitude;
       if (point.longitude > maxLng) maxLng = point.longitude;
     }
-    return LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
+    return LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng));
   }
 
   void _setMapStyle() async {
