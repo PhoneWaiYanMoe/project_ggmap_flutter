@@ -15,6 +15,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/popular_places_widget.dart';
 import '../../services/popular_places_service.dart';
+import '../../services/hazard_service.dart';
 
 class MapView extends StatefulWidget {
   final MapModel model;
@@ -56,6 +57,7 @@ class _MapViewState extends State<MapView> {
                     infoWindow: InfoWindow(title: "To: ${widget.model.toPlaceName}"),
                   ),
                 ...widget.model.cameraMarkers,
+                ...widget.model.hazardMarkers,
               },
               polylines: widget.model.polylines,
               myLocationEnabled: true,
@@ -139,14 +141,14 @@ class _MapViewState extends State<MapView> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: widget.model.usingLiveData ? Colors.green.withOpacity(0.9) : Colors.red.withOpacity(0.9),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               widget.model.usingLiveData ? "Using Live Data" : "No Live Data (API Unavailable)",
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -164,14 +166,14 @@ class _MapViewState extends State<MapView> {
       child: InkWell(
         onTap: () => widget.controller.onToSelected(context),
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(Icons.search, color: Theme.of(context).primaryColor),
-              SizedBox(width: 16),
+              Icon(Icons.search, color: Colors.blue),
+              const SizedBox(width: 16),
               Text(
                 "Search for a location...",
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
             ],
           ),
@@ -186,26 +188,25 @@ class _MapViewState extends State<MapView> {
       child: InkWell(
         onTap: () => isFrom ? widget.controller.onFromSelected(context) : widget.controller.onToSelected(context),
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Icon(
                 isFrom ? Icons.my_location : Icons.location_on,
                 color: isFrom ? Colors.green : Colors.red,
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       label,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                    SizedBox(height: 4),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),                    ),
+                    const SizedBox(height: 4),
                     Text(
                       placeName,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -221,26 +222,26 @@ class _MapViewState extends State<MapView> {
 
   Widget _buildNavigationHeader(BuildContext context) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
       child: Row(
         children: [
           Icon(Icons.navigation, color: Theme.of(context).primaryColor),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   "Route from ${widget.model.fromPlaceName}",
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 if (widget.model.estimatedArrival != null)
                   Text(
@@ -272,59 +273,59 @@ class _MapViewState extends State<MapView> {
             mini: true,
             onPressed: () => _showPopularPlaces(context),
             backgroundColor: Colors.purple,
-            child: Icon(Icons.explore, color: Colors.white),
+            child: const Icon(Icons.explore, color: Colors.white),
             tooltip: 'Địa điểm nổi tiếng',
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "zoomIn",
             mini: true,
             onPressed: widget.controller.onZoomIn,
-            child: Icon(Icons.add),
+            child: const Icon(Icons.add),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "zoomOut",
             mini: true,
             onPressed: widget.controller.onZoomOut,
-            child: Icon(Icons.remove),
+            child: const Icon(Icons.remove),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "location",
             mini: true,
             onPressed: widget.controller.onMyLocation,
-            child: Icon(Icons.my_location),
+            child: const Icon(Icons.my_location),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "startNav",
             mini: true,
             onPressed: () => widget.controller.onStartNavigation(),
-            child: Icon(Icons.play_arrow),
+            child: const Icon(Icons.play_arrow),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "regenPath",
             mini: true,
             onPressed: () async {
               await widget.model.regenerateShortestPath();
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Shortest path recalculated at ${DateTime.now()}')),
+                const SnackBar(content: Text('Shortest path recalculated')),
               );
             },
-            child: Icon(Icons.refresh),
+            child: const Icon(Icons.refresh),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           // News button
           FloatingActionButton(
             heroTag: "viewNews",
             mini: true,
             onPressed: () => _showNewsModal(context),
             backgroundColor: Colors.deepOrange,
-            child: Icon(Icons.article, color: Colors.white),
+            child: const Icon(Icons.article, color: Colors.white),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "sharePath",
             mini: true,
@@ -334,15 +335,24 @@ class _MapViewState extends State<MapView> {
               if (await file.exists()) {
                 await Share.shareXFiles(
                   [XFile(filePath)],
-                  text: 'Here is the shortest path at ${DateTime.now()}',
+                  text: 'Here is the shortest path',
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Shortest path file not found!')),
+                  const SnackBar(content: Text('Shortest path file not found!')),
                 );
               }
             },
-            child: Icon(Icons.route),
+            child: const Icon(Icons.route),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: "reportHazard",
+            mini: true,
+            onPressed: () => _showHazardReportDialog(context),
+            backgroundColor: Colors.red.shade600,
+            child: const Icon(Icons.warning, color: Colors.white),
+            tooltip: 'Báo cáo sự cố',
           ),
         ],
       ),
@@ -369,7 +379,27 @@ class _MapViewState extends State<MapView> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Đã chọn "${place.name}" làm điểm đến'),
-              duration: Duration(seconds: 2),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showHazardReportDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => HazardReportBottomSheet(
+        currentLocation: widget.model.currentLocation,
+        onHazardReported: () async {
+          await widget.model.loadHazards();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sự cố đã được báo cáo thành công!'),
+              backgroundColor: Colors.green,
             ),
           );
         },
@@ -379,12 +409,12 @@ class _MapViewState extends State<MapView> {
 
   Widget _buildDirectionSection(BuildContext context) {
     return Container(
-      margin: EdgeInsets.all(16),
-      padding: EdgeInsets.all(16),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2)),
         ],
       ),
@@ -397,7 +427,7 @@ class _MapViewState extends State<MapView> {
               Expanded(
                 child: Row(
                   children: [
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -405,7 +435,7 @@ class _MapViewState extends State<MapView> {
                           widget.model.distance != null
                               ? "${widget.model.distance!.toStringAsFixed(2)} km"
                               : "Calculating...",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -423,24 +453,24 @@ class _MapViewState extends State<MapView> {
     final startCamera = widget.model.fromLocation != null ? widget.model.findNearestCamera(widget.model.fromLocation!) : 'Unknown';
     final endCamera = widget.model.toLocation != null ? widget.model.findNearestCamera(widget.model.toLocation!) : 'Unknown';
     return Container(
-      margin: EdgeInsets.all(16),
-      padding: EdgeInsets.all(16),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             "Shortest Path from $startCamera to $endCamera",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             "Path: ${widget.model.shortestPath.join(" -> ")}",
-            style: TextStyle(fontSize: 16),
+            style: const TextStyle(fontSize: 16),
           ),
           Text(
             "Total Time: ${widget.model.totalTravelTime.toStringAsFixed(2)} minutes",
@@ -453,14 +483,14 @@ class _MapViewState extends State<MapView> {
 
   Widget _buildTurnByTurnButton(BuildContext context) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ElevatedButton(
         onPressed: () => _showTurnByTurnNavigation(context),
         style: ElevatedButton.styleFrom(
           backgroundColor: Theme.of(context).primaryColor,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        child: Text(
+        child: const Text(
           "Show Turn-by-Turn",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
@@ -485,10 +515,10 @@ class _MapViewState extends State<MapView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Theme.of(context).primaryColor,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
                 children: [
@@ -500,8 +530,8 @@ class _MapViewState extends State<MapView> {
                         : Icons.directions_walk,
                     color: Colors.white,
                   ),
-                  SizedBox(width: 12),
-                  Text(
+                  const SizedBox(width: 12),
+                  const Text(
                     "Turn-by-Turn Navigation",
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
@@ -521,9 +551,9 @@ class _MapViewState extends State<MapView> {
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Theme.of(context).primaryColor,
-                          child: Text('$index', style: TextStyle(color: Colors.white)),
+                          child: Text('$index', style: const TextStyle(color: Colors.white)),
                         ),
-                        title: Text(step, style: TextStyle(fontSize: 14)),
+                        title: Text(step, style: const TextStyle(fontSize: 14)),
                       ),
                     );
                   }).toList(),
@@ -531,14 +561,14 @@ class _MapViewState extends State<MapView> {
               ),
             ),
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     style: TextButton.styleFrom(foregroundColor: Theme.of(context).primaryColor),
-                    child: Text("Close"),
+                    child: const Text("Close"),
                   ),
                 ],
               ),
@@ -557,7 +587,7 @@ class _MapViewState extends State<MapView> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.7,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
@@ -567,7 +597,7 @@ class _MapViewState extends State<MapView> {
             Container(
               width: 40,
               height: 4,
-              margin: EdgeInsets.symmetric(vertical: 8),
+              margin: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.grey[300],
                 borderRadius: BorderRadius.circular(2),
@@ -576,16 +606,16 @@ class _MapViewState extends State<MapView> {
 
             // Header with refresh button
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  const Text(
                     'Chi tiết thời tiết',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
-                    icon: Icon(Icons.refresh),
+                    icon: const Icon(Icons.refresh),
                     onPressed: () {
                       widget.model.fetchWeatherData();
                       Navigator.pop(context);
@@ -598,17 +628,17 @@ class _MapViewState extends State<MapView> {
             // Weather Content Only
             Expanded(
               child: SingleChildScrollView(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
                     if (widget.model.currentWeather != null) ...[
                       _buildCurrentWeatherCard(),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       _buildAirQualityCard(),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
                       _buildDrivingConditionsCard(),
                     ] else
-                      Center(
+                      const Center(
                         child: Column(
                           children: [
                             CircularProgressIndicator(),
@@ -635,7 +665,7 @@ class _MapViewState extends State<MapView> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.8,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
@@ -645,7 +675,7 @@ class _MapViewState extends State<MapView> {
             Container(
               width: 40,
               height: 4,
-              margin: EdgeInsets.symmetric(vertical: 8),
+              margin: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.grey[300],
                 borderRadius: BorderRadius.circular(2),
@@ -654,22 +684,22 @@ class _MapViewState extends State<MapView> {
 
             // Header with refresh button
             Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  const Text(
                     'Tin tức địa phương',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
-                    icon: Icon(Icons.refresh),
+                    icon: const Icon(Icons.refresh),
                     onPressed: () async {
                       // Show loading indicator
                       showDialog(
                         context: context,
                         barrierDismissible: false,
-                        builder: (context) => Center(
+                        builder: (context) => const Center(
                           child: CircularProgressIndicator(),
                         ),
                       );
@@ -689,9 +719,7 @@ class _MapViewState extends State<MapView> {
             ),
 
             // News Content
-            Expanded(
-              child: _buildNewsContent(),
-            ),
+            Expanded(child: _buildNewsContent()),
           ],
         ),
       ),
@@ -705,24 +733,24 @@ class _MapViewState extends State<MapView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.article_outlined, size: 64, color: Colors.grey[400]),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'Không có tin tức nào hiện tại',
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               'Hãy thử làm mới để tải tin tức mới',
               style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () async {
                 // Show loading
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (context) => Center(child: CircularProgressIndicator()),
+                  builder: (context) => const Center(child: CircularProgressIndicator()),
                 );
 
                 await widget.model.refreshNews();
@@ -732,8 +760,8 @@ class _MapViewState extends State<MapView> {
                 Navigator.pop(context);
                 _showNewsModal(context);
               },
-              icon: Icon(Icons.refresh),
-              label: Text('Làm mới tin tức'),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Làm mới tin tức'),
             ),
           ],
         ),
@@ -741,12 +769,12 @@ class _MapViewState extends State<MapView> {
     }
 
     return ListView.builder(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       itemCount: widget.model.newsArticles.length,
       itemBuilder: (context, index) {
         final article = widget.model.newsArticles[index];
         return Card(
-          margin: EdgeInsets.only(bottom: 12),
+          margin: const EdgeInsets.only(bottom: 12),
           elevation: 2,
           child: InkWell(
             onTap: () async {
@@ -762,14 +790,14 @@ class _MapViewState extends State<MapView> {
               }
             },
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.article, color: Colors.blue, size: 20),
-                      SizedBox(width: 8),
+                      const Icon(Icons.article, color: Colors.blue, size: 20),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           article['source'] ?? 'Không rõ nguồn',
@@ -790,17 +818,17 @@ class _MapViewState extends State<MapView> {
                         ),
                     ],
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     article['title'] ?? 'Không có tiêu đề',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
                   ),
                   if (article['description'] != null && article['description'].isNotEmpty) ...[
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       article['description'],
                       style: TextStyle(
@@ -812,7 +840,7 @@ class _MapViewState extends State<MapView> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
@@ -824,7 +852,7 @@ class _MapViewState extends State<MapView> {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      SizedBox(width: 4),
+                      const SizedBox(width: 4),
                       Icon(
                         Icons.arrow_forward_ios,
                         size: 12,
@@ -868,7 +896,7 @@ class _MapViewState extends State<MapView> {
     return Card(
       elevation: 4,
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -879,17 +907,17 @@ class _MapViewState extends State<MapView> {
                     imageUrl: current['condition_icon'],
                     width: 64,
                     height: 64,
-                    placeholder: (context, url) => CircularProgressIndicator(),
-                    errorWidget: (context, url, error) => Icon(Icons.wb_sunny, size: 64),
+                    placeholder: (context, url) => const CircularProgressIndicator(),
+                    errorWidget: (context, url, error) => const Icon(Icons.wb_sunny, size: 64),
                   ),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         '${location['name']}',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       Text(
                         '${current['condition']}',
@@ -897,16 +925,16 @@ class _MapViewState extends State<MapView> {
                       ),
                       Text(
                         '${current['temp_c']}°C',
-                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 16),
-            Divider(),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -915,7 +943,7 @@ class _MapViewState extends State<MapView> {
                 _buildWeatherDetailItem('Gió', '${current['wind_kph']} km/h', Icons.air),
               ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -934,14 +962,14 @@ class _MapViewState extends State<MapView> {
     return Column(
       children: [
         Icon(icon, color: Colors.blue, size: 24),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
           label,
           style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
         Text(
           value,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -949,7 +977,7 @@ class _MapViewState extends State<MapView> {
 
   Widget _buildAirQualityCard() {
     final airQuality = widget.model.currentWeather!['air_quality'];
-    if (airQuality == null) return SizedBox.shrink();
+    if (airQuality == null) return const SizedBox.shrink();
 
     final usEpaIndex = airQuality['us_epa_index'] ?? 1;
     String aqiText = '';
@@ -985,23 +1013,23 @@ class _MapViewState extends State<MapView> {
     return Card(
       elevation: 4,
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Icon(Icons.air, color: aqiColor),
-                SizedBox(width: 8),
-                Text(
+                const SizedBox(width: 8),
+                const Text(
                   'Chất lượng không khí',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Container(
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: aqiColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -1017,7 +1045,7 @@ class _MapViewState extends State<MapView> {
                       color: aqiColor,
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Text(
                     aqiText,
                     style: TextStyle(
@@ -1028,7 +1056,7 @@ class _MapViewState extends State<MapView> {
                 ],
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -1052,7 +1080,7 @@ class _MapViewState extends State<MapView> {
         ),
         Text(
           value,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         Text(
           'μg/m³',
@@ -1063,7 +1091,7 @@ class _MapViewState extends State<MapView> {
   }
 
   Widget _buildDrivingConditionsCard() {
-    if (widget.model.drivingConditions == null) return SizedBox.shrink();
+    if (widget.model.drivingConditions == null) return const SizedBox.shrink();
 
     final conditions = widget.model.drivingConditions!;
     final safe = conditions['safe'] ?? true;
@@ -1073,7 +1101,7 @@ class _MapViewState extends State<MapView> {
     return Card(
       elevation: 4,
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1083,16 +1111,16 @@ class _MapViewState extends State<MapView> {
                   safe ? Icons.check_circle : Icons.warning,
                   color: safe ? Colors.green : Colors.red,
                 ),
-                SizedBox(width: 8),
-                Text(
+                const SizedBox(width: 8),
+                const Text(
                   'Điều kiện lái xe',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Container(
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: (safe ? Colors.green : Colors.red).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -1107,18 +1135,18 @@ class _MapViewState extends State<MapView> {
               ),
             ),
             if (warnings.isNotEmpty) ...[
-              SizedBox(height: 16),
-              Text('⚠️ Cảnh báo:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              const Text('⚠️ Cảnh báo:', style: TextStyle(fontWeight: FontWeight.bold)),
               ...warnings.map((warning) => Padding(
-                padding: EdgeInsets.only(left: 16, top: 4),
+                padding: const EdgeInsets.only(left: 16, top: 4),
                 child: Text('• $warning'),
               )),
             ],
             if (recommendations.isNotEmpty) ...[
-              SizedBox(height: 16),
-              Text('💡 Khuyến nghị:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              const Text('💡 Khuyến nghị:', style: TextStyle(fontWeight: FontWeight.bold)),
               ...recommendations.map((rec) => Padding(
-                padding: EdgeInsets.only(left: 16, top: 4),
+                padding: const EdgeInsets.only(left: 16, top: 4),
                 child: Text('• $rec'),
               )),
             ],
@@ -1126,5 +1154,225 @@ class _MapViewState extends State<MapView> {
         ),
       ),
     );
+  }
+}
+
+class HazardReportBottomSheet extends StatefulWidget {
+  final LatLng? currentLocation;
+  final VoidCallback onHazardReported;
+
+  const HazardReportBottomSheet({
+    super.key,
+    required this.currentLocation,
+    required this.onHazardReported,
+  });
+
+  @override
+  _HazardReportBottomSheetState createState() => _HazardReportBottomSheetState();
+}
+
+class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _descriptionController = TextEditingController();
+
+  HazardType _selectedType = HazardType.accident;
+  HazardDuration _selectedDuration = HazardDuration.oneHour;
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitReport() async {
+    if (!_formKey.currentState!.validate() || widget.currentLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng điền đầy đủ thông tin'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final hazardService = HazardService();
+      await hazardService.reportHazard(
+        type: _selectedType,
+        description: _descriptionController.text.trim(),
+        location: widget.currentLocation!,
+        locationName: 'Vị trí hiện tại',
+        duration: _selectedDuration,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onHazardReported();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi khi báo cáo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.8,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 32),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Báo cáo sự cố',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Tại vị trí hiện tại của bạn',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Hazard Type
+                    const Text('Loại sự cố', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    ...HazardType.values.map((type) => RadioListTile<HazardType>(
+                      title: Text(HazardService.getHazardTypeLabel(type)),
+                      value: type,
+                      groupValue: _selectedType,
+                      onChanged: (value) => setState(() => _selectedType = value!),
+                    )),
+
+                    const SizedBox(height: 16),
+
+                    // Description
+                    const Text('Mô tả chi tiết', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _descriptionController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: _getDescriptionHint(),
+                        border: const OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Vui lòng nhập mô tả';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Duration
+                    const Text('Thời gian hiệu lực', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<HazardDuration>(
+                      value: _selectedDuration,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: HazardDuration.values.map((duration) {
+                        return DropdownMenuItem(
+                          value: duration,
+                          child: Text(HazardService.getDurationLabel(duration)),
+                        );
+                      }).toList(),
+                      onChanged: (value) => setState(() => _selectedDuration = value!),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Submit Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submitReport,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                        ),
+                        child: _isLoading
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : const Text(
+                          'Báo cáo sự cố',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getDescriptionHint() {
+    switch (_selectedType) {
+      case HazardType.accident:
+        return 'VD: Tai nạn 2 xe máy, ùn tắc nghiêm trọng...';
+      case HazardType.naturalHazard:
+        return 'VD: Cây to đổ ngang đường, ngập sâu 30cm...';
+      case HazardType.roadWork:
+        return 'VD: Đang sửa chữa mặt đường, chỉ còn 1 làn xe...';
+      case HazardType.other:
+        return 'VD: Biển báo bị đổ, đèn tín hiệu hỏng...';
+    }
   }
 }

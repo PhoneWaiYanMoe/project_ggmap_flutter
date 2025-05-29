@@ -15,6 +15,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/scheduler.dart';
 import '../../services/vietnam_weather_service.dart';
 import '../../services/news_service.dart';
+import '../../services/hazard_service.dart';
 
 // Top-level functions for compute
 double _haversineDistanceCoord(LatLng from, LatLng to) {
@@ -137,6 +138,12 @@ class MapModel extends ChangeNotifier {
   final NewsService _newsService = NewsService();
   Timer? _newsUpdateTimer;
 
+  // Hazard fields
+  List<Hazard> _reportedHazards = [];
+  final HazardService _hazardService = HazardService();
+  final Set<Marker> _hazardMarkers = {};
+  Timer? _hazardUpdateTimer;
+
   final Map<String, LatLng> _cameraCoords = {
     'A': LatLng(10.767778, 106.671694),
     'B': LatLng(10.773833, 106.677778),
@@ -178,6 +185,8 @@ class MapModel extends ChangeNotifier {
   Map<String, dynamic>? get drivingConditions => _drivingConditions;
   List<String> get weatherWarnings => _weatherWarnings;
   List<Map<String, dynamic>> get newsArticles => _newsArticles;
+  List<Hazard> get reportedHazards => _reportedHazards;
+  Set<Marker> get hazardMarkers => _hazardMarkers;
 
   MapModel() {
     _init();
@@ -247,9 +256,159 @@ class MapModel extends ChangeNotifier {
     await _requestStoragePermission();
     await _fetchCurrentDensities();
     await fetchWeatherData();
+    await _initHazards();
     await _fetchNews();
     print('MapModel initialization completed at ${DateTime.now()}');
     notifyListeners();
+  }
+
+  // Initialize hazard system
+  Future<void> _initHazards() async {
+    await loadHazards();
+    _startHazardUpdates();
+  }
+
+  // Load hazards from storage
+  Future<void> loadHazards() async {
+    try {
+      _reportedHazards = await _hazardService.loadHazards();
+      _updateHazardMarkers();
+      print('Loaded ${_reportedHazards.length} active hazards');
+      notifyListeners();
+    } catch (e) {
+      print('Error loading hazards: $e');
+    }
+  }
+
+  // Start periodic hazard updates
+  void _startHazardUpdates() {
+    _hazardUpdateTimer?.cancel();
+    _hazardUpdateTimer = Timer.periodic(Duration(minutes: 1), (timer) async {
+      await _cleanupExpiredHazards();
+    });
+  }
+
+  // Stop hazard updates
+  void _stopHazardUpdates() {
+    _hazardUpdateTimer?.cancel();
+  }
+
+  // Clean up expired hazards
+  Future<void> _cleanupExpiredHazards() async {
+    try {
+      await _hazardService.cleanupExpiredHazards();
+      final oldCount = _reportedHazards.length;
+      _reportedHazards = await _hazardService.loadHazards();
+
+      if (_reportedHazards.length != oldCount) {
+        print('Cleaned up ${oldCount - _reportedHazards.length} expired hazards');
+        _updateHazardMarkers();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error cleaning up hazards: $e');
+    }
+  }
+
+  // Update hazard markers on map
+  void _updateHazardMarkers() {
+    _hazardMarkers.clear();
+
+    for (final hazard in _reportedHazards) {
+      if (!hazard.isExpired) {
+        _hazardMarkers.add(
+          Marker(
+            markerId: MarkerId('hazard_${hazard.id}'),
+            position: hazard.location,
+            icon: _getHazardIcon(hazard.type),
+            infoWindow: InfoWindow(
+              title: HazardService.getHazardTypeLabel(hazard.type),
+              snippet: hazard.description,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  // Get appropriate icon for hazard type
+  BitmapDescriptor _getHazardIcon(HazardType type) {
+    switch (type) {
+      case HazardType.accident:
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+      case HazardType.naturalHazard:
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+      case HazardType.roadWork:
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
+      case HazardType.other:
+        return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta);
+    }
+  }
+
+  // Report a new hazard
+  Future<void> reportHazard({
+    required HazardType type,
+    required String description,
+    required LatLng location,
+    required String locationName,
+    required HazardDuration duration,
+  }) async {
+    try {
+      await _hazardService.reportHazard(
+        type: type,
+        description: description,
+        location: location,
+        locationName: locationName,
+        duration: duration,
+      );
+
+      // Reload hazards to include the new one
+      await loadHazards();
+    } catch (e) {
+      print('Error reporting hazard: $e');
+      rethrow;
+    }
+  }
+
+  // Get hazards on the current route
+  List<Hazard> getHazardsOnRoute() {
+    if (_fromLocation == null || _toLocation == null) return [];
+
+    final routeHazards = <Hazard>[];
+    const double routeRadius = 1.0; // 1km radius from route points
+
+    // Check hazards near start and end points
+    for (final hazard in _reportedHazards) {
+      if (hazard.isExpired) continue;
+
+      final distanceFromStart = _calculateHazardDistance(_fromLocation!, hazard.location);
+      final distanceFromEnd = _calculateHazardDistance(_toLocation!, hazard.location);
+
+      if (distanceFromStart <= routeRadius || distanceFromEnd <= routeRadius) {
+        routeHazards.add(hazard);
+      }
+    }
+
+    return routeHazards;
+  }
+
+  // Calculate distance between two points
+  double _calculateHazardDistance(LatLng point1, LatLng point2) {
+    const double earthRadius = 6371; // Earth's radius in kilometers
+
+    final lat1Rad = point1.latitude * (pi / 180);
+    final lon1Rad = point1.longitude * (pi / 180);
+    final lat2Rad = point2.latitude * (pi / 180);
+    final lon2Rad = point2.longitude * (pi / 180);
+
+    final dLat = lat2Rad - lat1Rad;
+    final dLon = lon2Rad - lon1Rad;
+
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1Rad) * cos(lat2Rad) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    return earthRadius * c;
   }
 
   Future<void> _requestStoragePermission() async {
@@ -265,6 +424,7 @@ class MapModel extends ChangeNotifier {
   @override
   void dispose() {
     _stopDensityUpdates();
+    _stopHazardUpdates();
     super.dispose();
   }
 
