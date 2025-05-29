@@ -14,6 +14,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/scheduler.dart';
 import '../../services/vietnam_weather_service.dart';
+import '../../services/news_service.dart';
 
 // Top-level functions for compute
 double _haversineDistanceCoord(LatLng from, LatLng to) {
@@ -131,6 +132,11 @@ class MapModel extends ChangeNotifier {
   List<String> _weatherWarnings = [];
   final VietnamWeatherService _weatherService = VietnamWeatherService();
 
+  // News fields
+  List<Map<String, dynamic>> _newsArticles = [];
+  final NewsService _newsService = NewsService();
+  Timer? _newsUpdateTimer;
+
   final Map<String, LatLng> _cameraCoords = {
     'A': LatLng(10.767778, 106.671694),
     'B': LatLng(10.773833, 106.677778),
@@ -171,9 +177,66 @@ class MapModel extends ChangeNotifier {
   Map<String, dynamic>? get weatherForecast => _weatherForecast;
   Map<String, dynamic>? get drivingConditions => _drivingConditions;
   List<String> get weatherWarnings => _weatherWarnings;
+  List<Map<String, dynamic>> get newsArticles => _newsArticles;
 
   MapModel() {
     _init();
+  }
+
+  // Add this method to detect country from coordinates
+  String _detectCountryFromLocation(LatLng? location) {
+    if (location == null) return 'Vietnam'; // Default fallback
+
+    final lat = location.latitude;
+    final lng = location.longitude;
+
+    // Vietnam coordinates bounds (approximate)
+    // North: 23.393395, South: 8.179900, East: 109.464638, West: 102.148224
+    if (lat >= 8.0 && lat <= 24.0 && lng >= 102.0 && lng <= 110.0) {
+      return 'Vietnam';
+    }
+
+    // Add other countries if needed for future expansion
+    // For now, default to Vietnam since your app is Vietnam-focused
+    return 'Vietnam';
+  }
+
+  // Add this method to get location-appropriate news queries
+  List<String> _getNewsQueriesForLocation(LatLng? location, String? placeName) {
+    final country = _detectCountryFromLocation(location);
+
+    if (country == 'Vietnam') {
+      // Vietnam-specific news queries
+      List<String> queries = [];
+
+      // If we have a specific place name, try it first
+      if (placeName != null && placeName != 'Select Destination' && placeName != 'Your Location') {
+        // Clean up the place name and add it
+        final cleanPlaceName = placeName.split(',').first.trim(); // Take first part before comma
+        queries.add(cleanPlaceName);
+        queries.add('$cleanPlaceName Vietnam');
+      }
+
+      // Add Vietnam-specific queries
+      queries.addAll([
+        'Ho Chi Minh City traffic',
+        'Saigon news',
+        'Vietnam traffic',
+        'Vietnam weather',
+        'Ho Chi Minh City',
+        'Vietnam news',
+        'Saigon traffic',
+        'Vietnam transport',
+        'Việt Nam',
+        'tin tức Việt Nam',
+        'giao thông Sài Gòn',
+      ]);
+
+      return queries;
+    }
+
+    // Fallback for other countries
+    return ['$country news', 'local news'];
   }
 
   Future<void> _init() async {
@@ -184,6 +247,7 @@ class MapModel extends ChangeNotifier {
     await _requestStoragePermission();
     await _fetchCurrentDensities();
     await fetchWeatherData();
+    await _fetchNews();
     print('MapModel initialization completed at ${DateTime.now()}');
     notifyListeners();
   }
@@ -238,11 +302,77 @@ class MapModel extends ChangeNotifier {
 
       if (_currentLocation != null) {
         await fetchWeatherData();
+        await _fetchNews();
       }
 
       notifyListeners();
     } catch (e) {
       print("Error getting current location: $e at ${DateTime.now()}");
+    }
+  }
+
+  Future<void> _fetchNews() async {
+    try {
+      print('Fetching news at ${DateTime.now()}');
+
+      // Use current location or destination location
+      final location = _currentLocation ?? _toLocation;
+      final placeName = _fromPlaceName != 'Your Location' ? _fromPlaceName : _toPlaceName;
+
+      // Detect country and get appropriate queries
+      final country = _detectCountryFromLocation(location);
+      final queries = _getNewsQueriesForLocation(location, placeName);
+
+      print('Detected country: $country');
+      print('Using news queries: $queries');
+
+      _newsArticles = [];
+
+      // Try each query until we get articles
+      for (String query in queries) {
+        try {
+          print('Trying news query: "$query"');
+
+          final articles = await _newsService.getNewsForLocation(
+            location: location,
+            placeName: query,
+            language: country == 'Vietnam' ? 'vi' : 'en',
+            pageSize: 8,
+            sortBy: 'publishedAt',
+          );
+
+          if (articles.isNotEmpty) {
+            _newsArticles.addAll(articles);
+            print('Found ${articles.length} articles with query: "$query"');
+
+            // If we have enough articles, break
+            if (_newsArticles.length >= 5) {
+              break;
+            }
+          }
+        } catch (e) {
+          print('Query "$query" failed: $e');
+          continue;
+        }
+      }
+
+      // Remove duplicates based on title
+      final uniqueArticles = <String, Map<String, dynamic>>{};
+      for (var article in _newsArticles) {
+        final title = article['title']?.toString() ?? '';
+        if (title.isNotEmpty && !uniqueArticles.containsKey(title)) {
+          uniqueArticles[title] = article;
+        }
+      }
+
+      _newsArticles = uniqueArticles.values.take(10).toList();
+
+      print('Successfully fetched ${_newsArticles.length} unique news articles for $country at ${DateTime.now()}');
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching news: $e at ${DateTime.now()}');
+      _newsArticles = [];
+      notifyListeners();
     }
   }
 
@@ -292,6 +422,7 @@ class MapModel extends ChangeNotifier {
     _fromPlaceName = name;
     _showTwoSearchBars = _toLocation != null;
     _updateCameraMarkers();
+    _fetchNews();
     notifyListeners();
   }
 
@@ -300,6 +431,7 @@ class MapModel extends ChangeNotifier {
     _toPlaceName = name;
     _showTwoSearchBars = true;
     _updateCameraMarkers();
+    _fetchNews();
     notifyListeners();
   }
 
@@ -311,7 +443,7 @@ class MapModel extends ChangeNotifier {
   Future<void> toggleNavigation() async {
     _isNavigating = !_isNavigating;
     _followUser = _isNavigating;
-    print('Navigation ${_isNavigating ? 'started' : 'stopped'} from $_fromLocation to $_toLocation at ${DateTime.now()}');
+    print('Navigation ${_isNavigating ? 'started' : 'stopped'} from $_fromPlaceName to $_toPlaceName at ${DateTime.now()}');
     if (_isNavigating && _fromLocation != null && _toLocation != null) {
       await _calculateAndFindShortestPath();
       _startDensityUpdates();
@@ -475,9 +607,10 @@ class MapModel extends ChangeNotifier {
         timer.cancel();
         return;
       }
-      print('Periodic density update triggered at ${DateTime.now()}');
+      print('Periodic density and news update triggered at ${DateTime.now()}');
       await _fetchCurrentDensities();
       await _updatePolylinesWithDensities();
+      await _fetchNews();
       final shouldRecalculate = _shortestPath.any((camera) {
         final oldDensity = _savedDensities?[camera] ?? 0.0;
         final newDensity = _lastDensities[camera] ?? 0.0;
@@ -493,6 +626,8 @@ class MapModel extends ChangeNotifier {
   void _stopDensityUpdates() {
     _densityUpdateTimer?.cancel();
     _densityUpdateTimer = null;
+    _newsUpdateTimer?.cancel();
+    _newsUpdateTimer = null;
   }
 
   Future<void> fetchWeatherData() async {
@@ -513,6 +648,39 @@ class MapModel extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('Error fetching weather data: $e');
+    }
+  }
+
+  Future<void> refreshNews() async {
+    print('Manually refreshing news at ${DateTime.now()}');
+    await _fetchNews();
+    notifyListeners();
+  }
+
+  Future<void> testNewsApi() async {
+    try {
+      print('Testing news API at ${DateTime.now()}');
+
+      final location = _currentLocation;
+      final country = _detectCountryFromLocation(location);
+
+      print('Testing for country: $country');
+      print('Current location: $location');
+
+      final testArticles = await _newsService.getNewsForLocation(
+        placeName: country == 'Vietnam' ? 'Vietnam' : 'news',
+        language: country == 'Vietnam' ? 'vi' : 'en',
+        pageSize: 1,
+        sortBy: 'publishedAt',
+      );
+
+      print('API Test Result: Found ${testArticles.length} articles');
+
+      if (testArticles.isNotEmpty) {
+        print('Sample article: ${testArticles.first['title']}');
+      }
+    } catch (e) {
+      print('API Test Failed: $e');
     }
   }
 
@@ -740,7 +908,7 @@ class MapModel extends ChangeNotifier {
         print('HTTP Response Body: ${response.body} at ${DateTime.now()}');
 
         if (response.statusCode != 200) {
-          print('Failed to fetch densities: Status ${response.statusCode}, Body: ${response.body} at ${DateTime.now()}');
+          print('Failed to fetch density: Status ${response.statusCode}, Body: ${response.body} at ${DateTime.now()}');
           throw Exception('Non-200 status code: ${response.statusCode}');
         }
 
@@ -754,7 +922,7 @@ class MapModel extends ChangeNotifier {
         }
 
         Map<String, double> newDensities = {};
-        bool densitiesChanged = false; // ✅ Fixed variable name
+        bool densityChanged = false;
         final cameras = densityJson['cameras'] as Map<String, dynamic>;
 
         for (var entry in cameras.entries) {
@@ -789,12 +957,11 @@ class MapModel extends ChangeNotifier {
           newDensities[entry.key] = value;
           final oldDensity = _lastDensities[entry.key] ?? 0.0;
           if (oldDensity != value) {
-            densitiesChanged = true; // ✅ Fixed variable name
+            densityChanged = true;
             print('Density changed for camera ${entry.key}: $oldDensity -> $value (Source: ${source ?? "unknown"}) at ${DateTime.now()}');
           }
         }
 
-        // ✅ Add missing camera fallback logic
         final allCameraIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
         for (String cameraId in allCameraIds) {
           if (!newDensities.containsKey(cameraId)) {
@@ -804,12 +971,12 @@ class MapModel extends ChangeNotifier {
           }
         }
 
-        print('Final densities (with fallbacks): $newDensities at ${DateTime.now()}');
-        print('Loaded new densities: $newDensities at ${DateTime.now()}');
+        print('Final density (with fallbacks): $newDensities at ${DateTime.now()}');
+        print('Loaded new density: $newDensities at ${DateTime.now()}');
         _lastDensities = newDensities;
         _usingLiveData = true;
 
-        if (densitiesChanged && _isNavigating) { // ✅ Fixed variable name
+        if (densityChanged && _isNavigating) {
           await _updatePolylinesWithDensities();
         }
 

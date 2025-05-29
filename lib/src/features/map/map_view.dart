@@ -12,6 +12,9 @@ import '../../widgets/vietnam_weather_widget.dart';
 import '../../widgets/compact_weather_icon.dart';
 import '../../services/vietnam_weather_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/popular_places_widget.dart';
+import '../../services/popular_places_service.dart';
 
 class MapView extends StatefulWidget {
   final MapModel model;
@@ -67,9 +70,9 @@ class _MapViewState extends State<MapView> {
               },
             ),
 
-            // Compact Weather Icon - Top Right
+            // Compact Weather Icon - Top Right (moved up to avoid search bar)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
+              top: MediaQuery.of(context).padding.top + 8, // Reduced padding
               right: 16,
               child: CompactWeatherIcon(
                 currentWeather: widget.model.currentWeather,
@@ -83,7 +86,7 @@ class _MapViewState extends State<MapView> {
             SafeArea(
               child: Column(
                 children: [
-                  SizedBox(height: 16), // Space for weather icon
+                  SizedBox(height: 8), // Reduced space for weather icon
                   _buildSearchSection(context),
                   _buildDataSourceBanner(context),
                   if (widget.model.isNavigating) _buildNavigationHeader(context),
@@ -260,9 +263,19 @@ class _MapViewState extends State<MapView> {
   Widget _buildMapControls(BuildContext context) {
     return Positioned(
       right: 16,
-      bottom: widget.model.shortestPath.isNotEmpty || widget.model.isNavigating ? 250 : (widget.model.toLocation != null ? 200 : 16),
+      bottom: widget.model.shortestPath.isNotEmpty || widget.model.isNavigating ? 290 : (widget.model.toLocation != null ? 240 : 56),
       child: Column(
         children: [
+          // Popular Places Button
+          FloatingActionButton(
+            heroTag: "popularPlaces",
+            mini: true,
+            onPressed: () => _showPopularPlaces(context),
+            backgroundColor: Colors.purple,
+            child: Icon(Icons.explore, color: Colors.white),
+            tooltip: 'Địa điểm nổi tiếng',
+          ),
+          SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "zoomIn",
             mini: true,
@@ -303,6 +316,15 @@ class _MapViewState extends State<MapView> {
             child: Icon(Icons.refresh),
           ),
           SizedBox(height: 8),
+          // News button
+          FloatingActionButton(
+            heroTag: "viewNews",
+            mini: true,
+            onPressed: () => _showNewsModal(context),
+            backgroundColor: Colors.deepOrange,
+            child: Icon(Icons.article, color: Colors.white),
+          ),
+          SizedBox(height: 8),
           FloatingActionButton(
             heroTag: "sharePath",
             mini: true,
@@ -323,6 +345,34 @@ class _MapViewState extends State<MapView> {
             child: Icon(Icons.route),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPopularPlaces(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => PopularPlacesWidget(
+        currentLocation: widget.model.currentLocation,
+        onPlaceSelected: (PopularPlace place) {
+          // Set the selected place as destination
+          widget.model.setToLocation(place.coordinates, place.name);
+
+          // If we have both from and to locations, calculate route
+          if (widget.model.fromLocation != null) {
+            widget.model.getRoute();
+          }
+
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã chọn "${place.name}" làm điểm đến'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
       ),
     );
   }
@@ -499,7 +549,7 @@ class _MapViewState extends State<MapView> {
     );
   }
 
-  // Weather Detail Modal
+  // Separate Weather Modal (without news)
   void _showDetailedWeather(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -545,7 +595,7 @@ class _MapViewState extends State<MapView> {
               ),
             ),
 
-            // Content
+            // Weather Content Only
             Expanded(
               child: SingleChildScrollView(
                 padding: EdgeInsets.all(16),
@@ -575,6 +625,240 @@ class _MapViewState extends State<MapView> {
         ),
       ),
     );
+  }
+
+  // Separate News Modal
+  void _showNewsModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header with refresh button
+            Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Tin tức địa phương',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.refresh),
+                    onPressed: () async {
+                      // Show loading indicator
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+
+                      await widget.model.refreshNews();
+
+                      // Close loading indicator
+                      Navigator.pop(context);
+
+                      // Refresh the modal
+                      Navigator.pop(context);
+                      _showNewsModal(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            // News Content
+            Expanded(
+              child: _buildNewsContent(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewsContent() {
+    if (widget.model.newsArticles.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.article_outlined, size: 64, color: Colors.grey[400]),
+            SizedBox(height: 16),
+            Text(
+              'Không có tin tức nào hiện tại',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Hãy thử làm mới để tải tin tức mới',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+            SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () async {
+                // Show loading
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => Center(child: CircularProgressIndicator()),
+                );
+
+                await widget.model.refreshNews();
+
+                // Close loading and refresh modal
+                Navigator.pop(context);
+                Navigator.pop(context);
+                _showNewsModal(context);
+              },
+              icon: Icon(Icons.refresh),
+              label: Text('Làm mới tin tức'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.all(16),
+      itemCount: widget.model.newsArticles.length,
+      itemBuilder: (context, index) {
+        final article = widget.model.newsArticles[index];
+        return Card(
+          margin: EdgeInsets.only(bottom: 12),
+          elevation: 2,
+          child: InkWell(
+            onTap: () async {
+              final url = article['url'] ?? '';
+              if (url.isNotEmpty) {
+                try {
+                  await launchUrl(Uri.parse(url));
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Không thể mở bài báo: $e')),
+                  );
+                }
+              }
+            },
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.article, color: Colors.blue, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          article['source'] ?? 'Không rõ nguồn',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      if (article['publishedAt'] != null && article['publishedAt'].isNotEmpty)
+                        Text(
+                          _formatPublishDate(article['publishedAt']),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    article['title'] ?? 'Không có tiêu đề',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  if (article['description'] != null && article['description'].isNotEmpty) ...[
+                    SizedBox(height: 8),
+                    Text(
+                      article['description'],
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        height: 1.4,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Nhấn để đọc thêm',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).primaryColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 12,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatPublishDate(String publishedAt) {
+    try {
+      final date = DateTime.parse(publishedAt);
+      final now = DateTime.now();
+      final difference = now.difference(date);
+
+      if (difference.inDays > 0) {
+        return '${difference.inDays} ngày trước';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours} giờ trước';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes} phút trước';
+      } else {
+        return 'Vừa xong';
+      }
+    } catch (e) {
+      return '';
+    }
   }
 
   Widget _buildCurrentWeatherCard() {
