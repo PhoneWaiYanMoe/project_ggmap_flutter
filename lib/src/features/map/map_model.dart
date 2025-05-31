@@ -1086,11 +1086,6 @@ class MapModel extends ChangeNotifier {
         final cameras = densityJson['cameras'] as Map<String, dynamic>;
 
         for (var entry in cameras.entries) {
-          if (entry.key is! String) {
-            print('Error: Invalid key type in cameras: ${entry.key} (expected String) at ${DateTime.now()}');
-            continue;
-          }
-
           double? value;
           String? source;
           if (entry.value is Map) {

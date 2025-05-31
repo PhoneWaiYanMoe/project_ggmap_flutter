@@ -2,26 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'map_model.dart';
 import 'map_controller.dart';
-import '../../features/auth/login_screen.dart';
-import '../../features/search/search_screen.dart';
 import '../../services/graphhopper_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
-import '../../widgets/vietnam_weather_widget.dart';
 import '../../widgets/compact_weather_icon.dart';
-import '../../services/vietnam_weather_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/popular_places_widget.dart';
 import '../../services/popular_places_service.dart';
 import '../../services/hazard_service.dart';
+import '../../services/language_service.dart';
+import '../../widgets/language_selector.dart';
 
 class MapView extends StatefulWidget {
   final MapModel model;
   final MapController controller;
+  final LanguageService languageService;
 
-  const MapView({super.key, required this.model, required this.controller});
+  const MapView({
+    super.key,
+    required this.model,
+    required this.controller,
+    required this.languageService,
+  });
 
   @override
   _MapViewState createState() => _MapViewState();
@@ -31,78 +34,93 @@ class _MapViewState extends State<MapView> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.model,
-      builder: (context, _) => Scaffold(
-        body: Stack(
-          children: [
-            GoogleMap(
-              onMapCreated: widget.controller.onMapCreated,
-              initialCameraPosition: CameraPosition(
-                target: LatLng(10.7769, 106.7009),
-                zoom: 12,
-              ),
-              markers: {
-                if (widget.model.fromLocation != null)
-                  Marker(
-                    markerId: MarkerId('fromLocation'),
-                    position: widget.model.fromLocation!,
-                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-                    infoWindow: InfoWindow(title: "From: ${widget.model.fromPlaceName}"),
+      animation: widget.languageService,
+      builder: (context, _) {
+        return AnimatedBuilder(
+          animation: widget.model,
+          builder: (context, _) => Scaffold(
+            body: Stack(
+              children: [
+                GoogleMap(
+                  onMapCreated: widget.controller.onMapCreated,
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(10.7769, 106.7009),
+                    zoom: 12,
                   ),
-                if (widget.model.toLocation != null)
-                  Marker(
-                    markerId: MarkerId('toLocation'),
-                    position: widget.model.toLocation!,
-                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                    infoWindow: InfoWindow(title: "To: ${widget.model.toPlaceName}"),
+                  markers: {
+                    if (widget.model.fromLocation != null)
+                      Marker(
+                        markerId: MarkerId('fromLocation'),
+                        position: widget.model.fromLocation!,
+                        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+                        infoWindow: InfoWindow(title: "${widget.languageService.translate('from')}: ${widget.model.fromPlaceName}"),
+                      ),
+                    if (widget.model.toLocation != null)
+                      Marker(
+                        markerId: MarkerId('toLocation'),
+                        position: widget.model.toLocation!,
+                        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                        infoWindow: InfoWindow(title: "${widget.languageService.translate('to')}: ${widget.model.toPlaceName}"),
+                      ),
+                    ...widget.model.cameraMarkers,
+                    ...widget.model.hazardMarkers,
+                  },
+                  polylines: widget.model.polylines,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  mapToolbarEnabled: false,
+                  compassEnabled: true,
+                  onCameraMove: (_) {
+                    if (widget.model.followUser && !widget.model.isNavigating) {
+                      widget.controller.onFollowToggle();
+                    }
+                  },
+                ),
+
+                // Language Selector - Top Left
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 8,
+                  left: 16,
+                  child: LanguageSelector(
+                    languageService: widget.languageService,
+                    isCompact: true,
                   ),
-                ...widget.model.cameraMarkers,
-                ...widget.model.hazardMarkers,
-              },
-              polylines: widget.model.polylines,
-              myLocationEnabled: true,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              mapToolbarEnabled: false,
-              compassEnabled: true,
-              onCameraMove: (_) {
-                if (widget.model.followUser && !widget.model.isNavigating) {
-                  widget.controller.onFollowToggle();
-                }
-              },
-            ),
+                ),
 
-            // Compact Weather Icon - Top Right (moved up to avoid search bar)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8, // Reduced padding
-              right: 16,
-              child: CompactWeatherIcon(
-                currentWeather: widget.model.currentWeather,
-                drivingConditions: widget.model.drivingConditions,
-                warnings: widget.model.weatherWarnings,
-                onTap: () => _showDetailedWeather(context),
-                onRefresh: () => widget.model.fetchWeatherData(),
-              ),
-            ),
+                // Compact Weather Icon - Top Right
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 8,
+                  right: 16,
+                  child: CompactWeatherIcon(
+                    currentWeather: widget.model.currentWeather,
+                    drivingConditions: widget.model.drivingConditions,
+                    warnings: widget.model.weatherWarnings,
+                    onTap: () => _showDetailedWeather(context),
+                    onRefresh: () => widget.model.fetchWeatherData(),
+                  ),
+                ),
 
-            SafeArea(
-              child: Column(
-                children: [
-                  SizedBox(height: 8), // Reduced space for weather icon
-                  _buildSearchSection(context),
-                  _buildDataSourceBanner(context),
-                  if (widget.model.isNavigating) _buildNavigationHeader(context),
-                  const Spacer(),
-                  if (widget.model.toLocation != null) _buildDirectionSection(context),
-                  if (widget.model.shortestPath.isNotEmpty) _buildShortestPathInfo(context),
-                  if (widget.model.isNavigating) _buildTurnByTurnButton(context),
-                ],
-              ),
+                SafeArea(
+                  child: Column(
+                    children: [
+                      SizedBox(height: 8),
+                      _buildSearchSection(context),
+                      _buildDataSourceBanner(context),
+                      if (widget.model.isNavigating) _buildNavigationHeader(context),
+                      const Spacer(),
+                      if (widget.model.toLocation != null) _buildDirectionSection(context),
+                      if (widget.model.shortestPath.isNotEmpty) _buildShortestPathInfo(context),
+                      if (widget.model.isNavigating) _buildTurnByTurnButton(context),
+                    ],
+                  ),
+                ),
+                _buildMapControls(context),
+              ],
             ),
-            _buildMapControls(context),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -124,9 +142,9 @@ class _MapViewState extends State<MapView> {
           else
             Column(
               children: [
-                _buildSearchField(context, "From", widget.model.fromPlaceName, true),
+                _buildSearchField(context, widget.languageService.translate('from'), widget.model.fromPlaceName, true),
                 Divider(height: 1),
-                _buildSearchField(context, "To", widget.model.toPlaceName, false),
+                _buildSearchField(context, widget.languageService.translate('to'), widget.model.toPlaceName, false),
               ],
             ),
         ],
@@ -147,7 +165,9 @@ class _MapViewState extends State<MapView> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              widget.model.usingLiveData ? "Using Live Data" : "No Live Data (API Unavailable)",
+              widget.model.usingLiveData
+                  ? widget.languageService.translate('using_live_data')
+                  : widget.languageService.translate('no_live_data'),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -172,7 +192,7 @@ class _MapViewState extends State<MapView> {
               Icon(Icons.search, color: Colors.blue),
               const SizedBox(width: 16),
               Text(
-                "Search for a location...",
+                widget.languageService.translate('search_location'),
                 style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
             ],
@@ -202,7 +222,8 @@ class _MapViewState extends State<MapView> {
                   children: [
                     Text(
                       label,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),                    ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       placeName,
@@ -240,12 +261,12 @@ class _MapViewState extends State<MapView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Route from ${widget.model.fromPlaceName}",
+                  "${widget.languageService.translate('route_from')} ${widget.model.fromPlaceName}",
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 if (widget.model.estimatedArrival != null)
                   Text(
-                    "ETA: ${widget.model.estimatedArrival!.hour}:${widget.model.estimatedArrival!.minute.toString().padLeft(2, '0')}",
+                    "${widget.languageService.translate('eta')}: ${widget.model.estimatedArrival!.hour}:${widget.model.estimatedArrival!.minute.toString().padLeft(2, '0')}",
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
               ],
@@ -267,14 +288,13 @@ class _MapViewState extends State<MapView> {
       bottom: widget.model.shortestPath.isNotEmpty || widget.model.isNavigating ? 290 : (widget.model.toLocation != null ? 240 : 56),
       child: Column(
         children: [
-          // Popular Places Button
           FloatingActionButton(
             heroTag: "popularPlaces",
             mini: true,
             onPressed: () => _showPopularPlaces(context),
             backgroundColor: Colors.purple,
+            tooltip: widget.languageService.translate('popular_places'),
             child: const Icon(Icons.explore, color: Colors.white),
-            tooltip: 'Địa điểm nổi tiếng',
           ),
           const SizedBox(height: 8),
           FloatingActionButton(
@@ -311,13 +331,12 @@ class _MapViewState extends State<MapView> {
             onPressed: () async {
               await widget.model.regenerateShortestPath();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Shortest path recalculated')),
+                SnackBar(content: Text(widget.languageService.translate('path_recalculated'))),
               );
             },
             child: const Icon(Icons.refresh),
           ),
           const SizedBox(height: 8),
-          // News button
           FloatingActionButton(
             heroTag: "viewNews",
             mini: true,
@@ -335,11 +354,11 @@ class _MapViewState extends State<MapView> {
               if (await file.exists()) {
                 await Share.shareXFiles(
                   [XFile(filePath)],
-                  text: 'Here is the shortest path',
+                  text: widget.languageService.translate('share_path_text'),
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Shortest path file not found!')),
+                  SnackBar(content: Text(widget.languageService.translate('path_file_not_found'))),
                 );
               }
             },
@@ -351,8 +370,8 @@ class _MapViewState extends State<MapView> {
             mini: true,
             onPressed: () => _showHazardReportDialog(context),
             backgroundColor: Colors.red.shade600,
+            tooltip: widget.languageService.translate('report_hazard'),
             child: const Icon(Icons.warning, color: Colors.white),
-            tooltip: 'Báo cáo sự cố',
           ),
         ],
       ),
@@ -367,22 +386,18 @@ class _MapViewState extends State<MapView> {
       builder: (context) => PopularPlacesWidget(
         currentLocation: widget.model.currentLocation,
         onPlaceSelected: (PopularPlace place) {
-          // Set the selected place as destination
           widget.model.setToLocation(place.coordinates, place.name);
-
-          // If we have both from and to locations, calculate route
           if (widget.model.fromLocation != null) {
             widget.model.getRoute();
           }
-
-          // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Đã chọn "${place.name}" làm điểm đến'),
+              content: Text(widget.languageService.translate('selected_as_destination').replaceAll('{name}', place.name)),
               duration: const Duration(seconds: 2),
             ),
           );
         },
+        languageService: widget.languageService,
       ),
     );
   }
@@ -394,11 +409,12 @@ class _MapViewState extends State<MapView> {
       backgroundColor: Colors.transparent,
       builder: (context) => HazardReportBottomSheet(
         currentLocation: widget.model.currentLocation,
+        languageService: widget.languageService,
         onHazardReported: () async {
           await widget.model.loadHazards();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sự cố đã được báo cáo thành công!'),
+            SnackBar(
+              content: Text(widget.languageService.translate('hazard_reported')),
               backgroundColor: Colors.green,
             ),
           );
@@ -433,8 +449,8 @@ class _MapViewState extends State<MapView> {
                       children: [
                         Text(
                           widget.model.distance != null
-                              ? "${widget.model.distance!.toStringAsFixed(2)} km"
-                              : "Calculating...",
+                              ? "${widget.model.distance!.toStringAsFixed(2)} ${widget.languageService.translate('km')}"
+                              : widget.languageService.translate('calculating'),
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -450,8 +466,8 @@ class _MapViewState extends State<MapView> {
   }
 
   Widget _buildShortestPathInfo(BuildContext context) {
-    final startCamera = widget.model.fromLocation != null ? widget.model.findNearestCamera(widget.model.fromLocation!) : 'Unknown';
-    final endCamera = widget.model.toLocation != null ? widget.model.findNearestCamera(widget.model.toLocation!) : 'Unknown';
+    final startCamera = widget.model.fromLocation != null ? widget.model.findNearestCamera(widget.model.fromLocation!) : widget.languageService.translate('unknown');
+    final endCamera = widget.model.toLocation != null ? widget.model.findNearestCamera(widget.model.toLocation!) : widget.languageService.translate('unknown');
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -464,16 +480,16 @@ class _MapViewState extends State<MapView> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            "Shortest Path from $startCamera to $endCamera",
+            "${widget.languageService.translate('shortest_path')} $startCamera ${widget.languageService.translate('to')} $endCamera",
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            "Path: ${widget.model.shortestPath.join(" -> ")}",
+            "${widget.languageService.translate('path')}: ${widget.model.shortestPath.join(" -> ")}",
             style: const TextStyle(fontSize: 16),
           ),
           Text(
-            "Total Time: ${widget.model.totalTravelTime.toStringAsFixed(2)} minutes",
+            "${widget.languageService.translate('total_time')}: ${widget.model.totalTravelTime.toStringAsFixed(2)} ${widget.languageService.translate('minutes')}",
             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
         ],
@@ -490,8 +506,8 @@ class _MapViewState extends State<MapView> {
           backgroundColor: Theme.of(context).primaryColor,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        child: const Text(
-          "Show Turn-by-Turn",
+        child: Text(
+          widget.languageService.translate('show_turn_by_turn'),
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
@@ -531,8 +547,8 @@ class _MapViewState extends State<MapView> {
                     color: Colors.white,
                   ),
                   const SizedBox(width: 12),
-                  const Text(
-                    "Turn-by-Turn Navigation",
+                  Text(
+                    widget.languageService.translate('turn_by_turn_navigation'),
                     style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -568,7 +584,7 @@ class _MapViewState extends State<MapView> {
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     style: TextButton.styleFrom(foregroundColor: Theme.of(context).primaryColor),
-                    child: const Text("Close"),
+                    child: Text(widget.languageService.translate('close')),
                   ),
                 ],
               ),
@@ -579,7 +595,6 @@ class _MapViewState extends State<MapView> {
     );
   }
 
-  // Separate Weather Modal (without news)
   void _showDetailedWeather(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -593,7 +608,6 @@ class _MapViewState extends State<MapView> {
         ),
         child: Column(
           children: [
-            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -603,15 +617,13 @@ class _MapViewState extends State<MapView> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
-            // Header with refresh button
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Chi tiết thời tiết',
+                  Text(
+                    widget.languageService.translate('weather_details'),
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
@@ -624,8 +636,6 @@ class _MapViewState extends State<MapView> {
                 ],
               ),
             ),
-
-            // Weather Content Only
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -638,12 +648,12 @@ class _MapViewState extends State<MapView> {
                       const SizedBox(height: 16),
                       _buildDrivingConditionsCard(),
                     ] else
-                      const Center(
+                      Center(
                         child: Column(
                           children: [
                             CircularProgressIndicator(),
                             SizedBox(height: 16),
-                            Text('Đang tải thông tin thời tiết...'),
+                            Text(widget.languageService.translate('loading_weather')),
                           ],
                         ),
                       ),
@@ -657,7 +667,6 @@ class _MapViewState extends State<MapView> {
     );
   }
 
-  // Separate News Modal
   void _showNewsModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -671,7 +680,6 @@ class _MapViewState extends State<MapView> {
         ),
         child: Column(
           children: [
-            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -681,21 +689,18 @@ class _MapViewState extends State<MapView> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
-            // Header with refresh button
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Tin tức địa phương',
+                  Text(
+                    widget.languageService.translate('local_news'),
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
                     icon: const Icon(Icons.refresh),
                     onPressed: () async {
-                      // Show loading indicator
                       showDialog(
                         context: context,
                         barrierDismissible: false,
@@ -703,13 +708,8 @@ class _MapViewState extends State<MapView> {
                           child: CircularProgressIndicator(),
                         ),
                       );
-
                       await widget.model.refreshNews();
-
-                      // Close loading indicator
                       Navigator.pop(context);
-
-                      // Refresh the modal
                       Navigator.pop(context);
                       _showNewsModal(context);
                     },
@@ -717,8 +717,6 @@ class _MapViewState extends State<MapView> {
                 ],
               ),
             ),
-
-            // News Content
             Expanded(child: _buildNewsContent()),
           ],
         ),
@@ -735,33 +733,29 @@ class _MapViewState extends State<MapView> {
             Icon(Icons.article_outlined, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              'Không có tin tức nào hiện tại',
+              widget.languageService.translate('no_news'),
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
-              'Hãy thử làm mới để tải tin tức mới',
+              widget.languageService.translate('try_refresh_news'),
               style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () async {
-                // Show loading
                 showDialog(
                   context: context,
                   barrierDismissible: false,
                   builder: (context) => const Center(child: CircularProgressIndicator()),
                 );
-
                 await widget.model.refreshNews();
-
-                // Close loading and refresh modal
                 Navigator.pop(context);
                 Navigator.pop(context);
                 _showNewsModal(context);
               },
               icon: const Icon(Icons.refresh),
-              label: const Text('Làm mới tin tức'),
+              label: Text(widget.languageService.translate('refresh_news')),
             ),
           ],
         ),
@@ -784,7 +778,7 @@ class _MapViewState extends State<MapView> {
                   await launchUrl(Uri.parse(url));
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Không thể mở bài báo: $e')),
+                    SnackBar(content: Text(widget.languageService.translate('cannot_open_article').replaceAll('{error}', e.toString()))),
                   );
                 }
               }
@@ -800,7 +794,7 @@ class _MapViewState extends State<MapView> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          article['source'] ?? 'Không rõ nguồn',
+                          article['source'] ?? widget.languageService.translate('unknown_source'),
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -820,7 +814,7 @@ class _MapViewState extends State<MapView> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    article['title'] ?? 'Không có tiêu đề',
+                    article['title'] ?? widget.languageService.translate('no_title'),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -845,7 +839,7 @@ class _MapViewState extends State<MapView> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
-                        'Nhấn để đọc thêm',
+                        widget.languageService.translate('read_more'),
                         style: TextStyle(
                           fontSize: 12,
                           color: Theme.of(context).primaryColor,
@@ -876,13 +870,13 @@ class _MapViewState extends State<MapView> {
       final difference = now.difference(date);
 
       if (difference.inDays > 0) {
-        return '${difference.inDays} ngày trước';
+        return '${difference.inDays} ${widget.languageService.translate('days_ago')}';
       } else if (difference.inHours > 0) {
-        return '${difference.inHours} giờ trước';
+        return '${difference.inHours} ${widget.languageService.translate('hours_ago')}';
       } else if (difference.inMinutes > 0) {
-        return '${difference.inMinutes} phút trước';
+        return '${difference.inMinutes} ${widget.languageService.translate('minutes_ago')}';
       } else {
-        return 'Vừa xong';
+        return widget.languageService.translate('just_now');
       }
     } catch (e) {
       return '';
@@ -938,18 +932,18 @@ class _MapViewState extends State<MapView> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildWeatherDetailItem('Cảm giác như', '${current['feelslike_c']}°C', Icons.thermostat),
-                _buildWeatherDetailItem('Độ ẩm', '${current['humidity']}%', Icons.water_drop),
-                _buildWeatherDetailItem('Gió', '${current['wind_kph']} km/h', Icons.air),
+                _buildWeatherDetailItem(widget.languageService.translate('feels_like'), '${current['feelslike_c']}°C', Icons.thermostat),
+                _buildWeatherDetailItem(widget.languageService.translate('humidity'), '${current['humidity']}%', Icons.water_drop),
+                _buildWeatherDetailItem(widget.languageService.translate('wind'), '${current['wind_kph']} ${widget.languageService.translate('km_h')}', Icons.air),
               ],
             ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildWeatherDetailItem('Tầm nhìn', '${current['vis_km']} km', Icons.visibility),
-                _buildWeatherDetailItem('UV Index', '${current['uv']}', Icons.wb_sunny),
-                _buildWeatherDetailItem('Áp suất', '${current['pressure_mb']} mb', Icons.speed),
+                _buildWeatherDetailItem(widget.languageService.translate('visibility'), '${current['vis_km']} ${widget.languageService.translate('km')}', Icons.visibility),
+                _buildWeatherDetailItem(widget.languageService.translate('uv_index'), '${current['uv']}', Icons.wb_sunny),
+                _buildWeatherDetailItem(widget.languageService.translate('pressure'), '${current['pressure_mb']} ${widget.languageService.translate('mb')}', Icons.speed),
               ],
             ),
           ],
@@ -985,27 +979,27 @@ class _MapViewState extends State<MapView> {
 
     switch (usEpaIndex) {
       case 1:
-        aqiText = 'Tốt';
+        aqiText = widget.languageService.translate('aqi_good');
         aqiColor = Colors.green;
         break;
       case 2:
-        aqiText = 'Trung bình';
+        aqiText = widget.languageService.translate('aqi_moderate');
         aqiColor = Colors.yellow;
         break;
       case 3:
-        aqiText = 'Không tốt cho nhóm nhạy cảm';
+        aqiText = widget.languageService.translate('aqi_unhealthy_sensitive');
         aqiColor = Colors.orange;
         break;
       case 4:
-        aqiText = 'Không tốt';
+        aqiText = widget.languageService.translate('aqi_unhealthy');
         aqiColor = Colors.red;
         break;
       case 5:
-        aqiText = 'Rất không tốt';
+        aqiText = widget.languageService.translate('aqi_very_unhealthy');
         aqiColor = Colors.purple;
         break;
       case 6:
-        aqiText = 'Nguy hiểm';
+        aqiText = widget.languageService.translate('aqi_hazardous');
         aqiColor = Colors.red.shade900;
         break;
     }
@@ -1021,8 +1015,8 @@ class _MapViewState extends State<MapView> {
               children: [
                 Icon(Icons.air, color: aqiColor),
                 const SizedBox(width: 8),
-                const Text(
-                  'Chất lượng không khí',
+                Text(
+                  widget.languageService.translate('air_quality'),
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -1112,8 +1106,8 @@ class _MapViewState extends State<MapView> {
                   color: safe ? Colors.green : Colors.red,
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  'Điều kiện lái xe',
+                Text(
+                  widget.languageService.translate('driving_conditions'),
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -1127,7 +1121,7 @@ class _MapViewState extends State<MapView> {
                 border: Border.all(color: safe ? Colors.green : Colors.red),
               ),
               child: Text(
-                safe ? 'An toàn để lái xe' : 'Cẩn thận khi lái xe',
+                safe ? widget.languageService.translate('safe_to_drive') : widget.languageService.translate('drive_with_caution'),
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: safe ? Colors.green : Colors.red,
@@ -1136,7 +1130,7 @@ class _MapViewState extends State<MapView> {
             ),
             if (warnings.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('⚠️ Cảnh báo:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(widget.languageService.translate('warnings'), style: TextStyle(fontWeight: FontWeight.bold)),
               ...warnings.map((warning) => Padding(
                 padding: const EdgeInsets.only(left: 16, top: 4),
                 child: Text('• $warning'),
@@ -1144,7 +1138,7 @@ class _MapViewState extends State<MapView> {
             ],
             if (recommendations.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('💡 Khuyến nghị:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(widget.languageService.translate('recommendations'), style: TextStyle(fontWeight: FontWeight.bold)),
               ...recommendations.map((rec) => Padding(
                 padding: const EdgeInsets.only(left: 16, top: 4),
                 child: Text('• $rec'),
@@ -1160,11 +1154,13 @@ class _MapViewState extends State<MapView> {
 class HazardReportBottomSheet extends StatefulWidget {
   final LatLng? currentLocation;
   final VoidCallback onHazardReported;
+  final LanguageService languageService;
 
   const HazardReportBottomSheet({
     super.key,
     required this.currentLocation,
     required this.onHazardReported,
+    required this.languageService,
   });
 
   @override
@@ -1188,8 +1184,8 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
   Future<void> _submitReport() async {
     if (!_formKey.currentState!.validate() || widget.currentLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng điền đầy đủ thông tin'),
+        SnackBar(
+          content: Text(widget.languageService.translate('fill_all_fields')),
           backgroundColor: Colors.red,
         ),
       );
@@ -1206,7 +1202,7 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
         type: _selectedType,
         description: _descriptionController.text.trim(),
         location: widget.currentLocation!,
-        locationName: 'Vị trí hiện tại',
+        locationName: widget.languageService.translate('current_location'),
         duration: _selectedDuration,
       );
 
@@ -1218,7 +1214,7 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi khi báo cáo: $e'),
+            content: Text(widget.languageService.translate('error_reporting_hazard').replaceAll('{error}', e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -1244,7 +1240,6 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
         key: _formKey,
         child: Column(
           children: [
-            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -1254,8 +1249,6 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
-            // Header
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -1266,12 +1259,12 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Báo cáo sự cố',
+                        Text(
+                          widget.languageService.translate('report_hazard'),
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          'Tại vị trí hiện tại của bạn',
+                          widget.languageService.translate('at_current_location'),
                           style: TextStyle(color: Colors.grey[600]),
                         ),
                       ],
@@ -1280,15 +1273,13 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
                 ],
               ),
             ),
-
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Hazard Type
-                    const Text('Loại sự cố', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(widget.languageService.translate('hazard_type'), style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     ...HazardType.values.map((type) => RadioListTile<HazardType>(
                       title: Text(HazardService.getHazardTypeLabel(type)),
@@ -1296,11 +1287,8 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
                       groupValue: _selectedType,
                       onChanged: (value) => setState(() => _selectedType = value!),
                     )),
-
                     const SizedBox(height: 16),
-
-                    // Description
-                    const Text('Mô tả chi tiết', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(widget.languageService.translate('detailed_description'), style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: _descriptionController,
@@ -1311,16 +1299,13 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
                       ),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
-                          return 'Vui lòng nhập mô tả';
+                          return widget.languageService.translate('enter_description');
                         }
                         return null;
                       },
                     ),
-
                     const SizedBox(height: 16),
-
-                    // Duration
-                    const Text('Thời gian hiệu lực', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(widget.languageService.translate('duration'), style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<HazardDuration>(
                       value: _selectedDuration,
@@ -1333,10 +1318,7 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
                       }).toList(),
                       onChanged: (value) => setState(() => _selectedDuration = value!),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Submit Button
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -1347,8 +1329,8 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
                         ),
                         child: _isLoading
                             ? const CircularProgressIndicator(color: Colors.white)
-                            : const Text(
-                          'Báo cáo sự cố',
+                            : Text(
+                          widget.languageService.translate('report_hazard'),
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -1366,13 +1348,13 @@ class _HazardReportBottomSheetState extends State<HazardReportBottomSheet> {
   String _getDescriptionHint() {
     switch (_selectedType) {
       case HazardType.accident:
-        return 'VD: Tai nạn 2 xe máy, ùn tắc nghiêm trọng...';
+        return widget.languageService.translate('accident_hint');
       case HazardType.naturalHazard:
-        return 'VD: Cây to đổ ngang đường, ngập sâu 30cm...';
+        return widget.languageService.translate('natural_hazard_hint');
       case HazardType.roadWork:
-        return 'VD: Đang sửa chữa mặt đường, chỉ còn 1 làn xe...';
+        return widget.languageService.translate('road_work_hint');
       case HazardType.other:
-        return 'VD: Biển báo bị đổ, đèn tín hiệu hỏng...';
+        return widget.languageService.translate('other_hazard_hint');
     }
   }
 }

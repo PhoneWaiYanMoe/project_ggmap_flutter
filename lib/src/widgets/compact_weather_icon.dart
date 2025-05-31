@@ -10,13 +10,13 @@ class CompactWeatherIcon extends StatelessWidget {
   final VoidCallback onRefresh;
 
   const CompactWeatherIcon({
-    Key? key,
+    super.key,
     required this.currentWeather,
     required this.drivingConditions,
     required this.warnings,
     required this.onTap,
     required this.onRefresh,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

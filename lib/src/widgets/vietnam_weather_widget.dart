@@ -11,14 +11,14 @@ class VietnamWeatherWidget extends StatelessWidget {
   final VoidCallback onExpand;
 
   const VietnamWeatherWidget({
-    Key? key,
+    super.key,
     required this.currentWeather,
     required this.forecast,
     required this.drivingConditions,
     required this.warnings,
     required this.onRefresh,
     required this.onExpand,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

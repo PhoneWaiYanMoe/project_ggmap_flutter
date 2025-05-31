@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'map_model.dart';
 import '../../features/search/search_screen.dart';
+import '../../services/language_service.dart';
 
 class MapController {
   final MapModel model;
+  final LanguageService languageService;
   late GoogleMapController _mapController;
 
-  MapController(this.model);
+  MapController(this.model, this.languageService);
 
   void onMapCreated(GoogleMapController controller) {
     _mapController = controller;
@@ -19,7 +21,10 @@ class MapController {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SearchScreen(currentLocation: model.currentLocation),
+        builder: (context) => SearchScreen(
+          currentLocation: model.currentLocation,
+          languageService: languageService,
+        ),
       ),
     );
     if (result != null && result is Map) {
@@ -37,7 +42,10 @@ class MapController {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SearchScreen(currentLocation: model.currentLocation),
+        builder: (context) => SearchScreen(
+          currentLocation: model.currentLocation,
+          languageService: languageService,
+        ),
       ),
     );
     if (result != null && result is Map) {

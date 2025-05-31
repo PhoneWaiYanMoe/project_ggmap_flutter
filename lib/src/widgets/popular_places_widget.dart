@@ -1,18 +1,20 @@
-// lib/src/widgets/popular_places_widget.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/popular_places_service.dart';
+import '../services/language_service.dart';
 
 class PopularPlacesWidget extends StatefulWidget {
   final LatLng? currentLocation;
   final Function(PopularPlace) onPlaceSelected;
+  final LanguageService languageService;
 
   const PopularPlacesWidget({
-    Key? key,
+    super.key,
     required this.currentLocation,
     required this.onPlaceSelected,
-  }) : super(key: key);
+    required this.languageService,
+  });
 
   @override
   _PopularPlacesWidgetState createState() => _PopularPlacesWidgetState();
@@ -25,16 +27,16 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
   String _selectedCategory = 'all';
   bool _showFamousPlaces = true;
 
-  final List<Map<String, dynamic>> _categories = [
-    {'key': 'all', 'name': 'Tất cả', 'icon': Icons.explore},
-    {'key': 'food', 'name': 'Ăn uống', 'icon': Icons.restaurant},
-    {'key': 'shopping', 'name': 'Mua sắm', 'icon': Icons.shopping_bag},
-    {'key': 'tourism', 'name': 'Du lịch', 'icon': Icons.camera_alt},
-    {'key': 'healthcare', 'name': 'Y tế', 'icon': Icons.local_hospital},
-    {'key': 'education', 'name': 'Giáo dục', 'icon': Icons.school},
-    {'key': 'transport', 'name': 'Giao thông', 'icon': Icons.directions_bus},
-    {'key': 'banking', 'name': 'Ngân hàng', 'icon': Icons.account_balance},
-    {'key': 'fuel', 'name': 'Xăng dầu', 'icon': Icons.local_gas_station},
+  List<Map<String, dynamic>> get _categories => [
+    {'key': 'all', 'name': widget.languageService.translate('all'), 'icon': Icons.explore},
+    {'key': 'food', 'name': widget.languageService.translate('food'), 'icon': Icons.restaurant},
+    {'key': 'shopping', 'name': widget.languageService.translate('shopping'), 'icon': Icons.shopping_bag},
+    {'key': 'tourism', 'name': widget.languageService.translate('tourism'), 'icon': Icons.camera_alt},
+    {'key': 'healthcare', 'name': widget.languageService.translate('healthcare'), 'icon': Icons.local_hospital},
+    {'key': 'education', 'name': widget.languageService.translate('education'), 'icon': Icons.school},
+    {'key': 'transport', 'name': widget.languageService.translate('transport'), 'icon': Icons.directions_bus},
+    {'key': 'banking', 'name': widget.languageService.translate('banking'), 'icon': Icons.account_balance},
+    {'key': 'fuel', 'name': widget.languageService.translate('fuel'), 'icon': Icons.local_gas_station},
   ];
 
   @override
@@ -71,7 +73,7 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
     } catch (e) {
       print('Error loading places: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi khi tải địa điểm: $e')),
+        SnackBar(content: Text(widget.languageService.translate('error_loading_places').replaceAll('{error}', e.toString()))),
       );
     } finally {
       setState(() {
@@ -108,7 +110,7 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Địa điểm nổi tiếng',
+                  widget.languageService.translate('popular_places'),
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 Row(
@@ -117,12 +119,12 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
                       icon: Icon(Icons.star,
                           color: _showFamousPlaces ? Colors.orange : Colors.grey),
                       onPressed: _loadFamousPlaces,
-                      tooltip: 'Địa điểm nổi tiếng',
+                      tooltip: widget.languageService.translate('famous_places'),
                     ),
                     IconButton(
                       icon: Icon(Icons.refresh),
                       onPressed: () => _searchPlaces(_selectedCategory),
-                      tooltip: 'Làm mới',
+                      tooltip: widget.languageService.translate('refresh'),
                     ),
                   ],
                 ),
@@ -131,7 +133,7 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
           ),
 
           // Category tabs
-          Container(
+          SizedBox(
             height: 50,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
@@ -185,7 +187,7 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('Đang tải địa điểm...'),
+                    Text(widget.languageService.translate('loading_places')),
                   ],
                 ),
               ),
@@ -202,12 +204,12 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
                     Icon(Icons.location_off, size: 64, color: Colors.grey[400]),
                     SizedBox(height: 16),
                     Text(
-                      'Không tìm thấy địa điểm nào',
+                      widget.languageService.translate('no_places_found'),
                       style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Thử chọn danh mục khác hoặc làm mới',
+                      widget.languageService.translate('try_another_category'),
                       style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                     ),
                   ],
@@ -286,7 +288,7 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                place.category,
+                                widget.languageService.translate(place.category.toLowerCase().replaceAll(' ', '_')),
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,
@@ -299,7 +301,7 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
                               Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
                               SizedBox(width: 2),
                               Text(
-                                '${distance.toStringAsFixed(1)} km',
+                                '${distance.toStringAsFixed(1)} ${widget.languageService.translate('km')}',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey[600],
@@ -350,22 +352,30 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
   }
 
   Color _getCategoryColor(String category) {
-    switch (category) {
-      case 'Ăn uống':
+    switch (category.toLowerCase()) {
+      case 'food':
+      case 'ăn uống':
         return Colors.orange;
-      case 'Mua sắm':
+      case 'shopping':
+      case 'mua sắm':
         return Colors.purple;
-      case 'Du lịch':
+      case 'tourism':
+      case 'du lịch':
         return Colors.blue;
-      case 'Y tế':
+      case 'healthcare':
+      case 'y tế':
         return Colors.red;
-      case 'Giáo dục':
+      case 'education':
+      case 'giáo dục':
         return Colors.green;
-      case 'Giao thông':
+      case 'transport':
+      case 'giao thông':
         return Colors.indigo;
-      case 'Ngân hàng':
+      case 'banking':
+      case 'ngân hàng':
         return Colors.teal;
-      case 'Xăng dầu':
+      case 'fuel':
+      case 'xăng dầu':
         return Colors.amber;
       default:
         return Colors.grey;
@@ -373,22 +383,30 @@ class _PopularPlacesWidgetState extends State<PopularPlacesWidget> {
   }
 
   IconData _getCategoryIcon(String category) {
-    switch (category) {
-      case 'Ăn uống':
+    switch (category.toLowerCase()) {
+      case 'food':
+      case 'ăn uống':
         return Icons.restaurant;
-      case 'Mua sắm':
+      case 'shopping':
+      case 'mua sắm':
         return Icons.shopping_bag;
-      case 'Du lịch':
+      case 'tourism':
+      case 'du lịch':
         return Icons.camera_alt;
-      case 'Y tế':
+      case 'healthcare':
+      case 'y tế':
         return Icons.local_hospital;
-      case 'Giáo dục':
+      case 'education':
+      case 'giáo dục':
         return Icons.school;
-      case 'Giao thông':
+      case 'transport':
+      case 'giao thông':
         return Icons.directions_bus;
-      case 'Ngân hàng':
+      case 'banking':
+      case 'ngân hàng':
         return Icons.account_balance;
-      case 'Xăng dầu':
+      case 'fuel':
+      case 'xăng dầu':
         return Icons.local_gas_station;
       default:
         return Icons.place;

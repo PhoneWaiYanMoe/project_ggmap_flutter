@@ -1,10 +1,8 @@
-// lib/src/features/search/search_screen.dart
-// Replace your search_screen.dart with this FREE version using Nominatim
-
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/nominatim_geocoding_service.dart';
+import '../../services/language_service.dart';
 import 'dart:async';
 
 class SearchLocation {
@@ -27,8 +25,13 @@ class SearchLocation {
 
 class SearchScreen extends StatefulWidget {
   final LatLng? currentLocation;
+  final LanguageService languageService;
 
-  const SearchScreen({super.key, required this.currentLocation});
+  const SearchScreen({
+    super.key,
+    required this.currentLocation,
+    required this.languageService,
+  });
 
   @override
   _SearchScreenState createState() => _SearchScreenState();
@@ -176,9 +179,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // Save to preferences
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> history = _searchHistory.map((loc) =>
-    '${loc.name}|${loc.coordinates.latitude}|${loc.coordinates.longitude}|${loc.address ?? ""}|${loc.placeId}|${loc.types.join(",")}'
-    ).toList();
+    List<String> history = _searchHistory
+        .map((loc) =>
+    '${loc.name}|${loc.coordinates.latitude}|${loc.coordinates.longitude}|${loc.address ?? ""}|${loc.placeId}|${loc.types.join(",")}')
+        .toList();
     await prefs.setStringList('searchHistory', history);
   }
 
@@ -212,7 +216,7 @@ class _SearchScreenState extends State<SearchScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Tìm kiếm địa điểm',
+          widget.languageService.translate('search_places'),
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.bold,
@@ -238,7 +242,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         controller: _searchController,
                         focusNode: _searchFocusNode,
                         decoration: InputDecoration(
-                          hintText: "Nhập tên đường, địa điểm, quận...",
+                          hintText: widget.languageService.translate('enter_street_place'),
                           border: InputBorder.none,
                           hintStyle: TextStyle(color: Colors.grey[400]),
                         ),
@@ -265,13 +269,13 @@ class _SearchScreenState extends State<SearchScreen> {
                   Icon(Icons.public, size: 16, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
-                    'Powered by OpenStreetMap',
+                    widget.languageService.translate('powered_by_openstreetmap'),
                     style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
                   Spacer(),
                   if (_searchResults.isNotEmpty)
                     Text(
-                      '${_searchResults.length} kết quả',
+                      '${_searchResults.length} ${widget.languageService.translate('results')}',
                       style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                     ),
                 ],
@@ -298,12 +302,12 @@ class _SearchScreenState extends State<SearchScreen> {
             CircularProgressIndicator(),
             SizedBox(height: 16),
             Text(
-              'Đang tìm kiếm...',
+              widget.languageService.translate('searching'),
               style: TextStyle(color: Colors.grey[600]),
             ),
             SizedBox(height: 8),
             Text(
-              'Sử dụng dữ liệu OpenStreetMap miễn phí',
+              widget.languageService.translate('using_free_openstreetmap_data'),
               style: TextStyle(fontSize: 12, color: Colors.grey[500]),
             ),
           ],
@@ -319,17 +323,17 @@ class _SearchScreenState extends State<SearchScreen> {
             Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
             SizedBox(height: 16),
             Text(
-              'Không tìm thấy kết quả',
+              widget.languageService.translate('no_results'),
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             SizedBox(height: 8),
             Text(
-              'Thử tìm kiếm với từ khóa khác',
+              widget.languageService.translate('try_different_keywords'),
               style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             ),
             SizedBox(height: 4),
             Text(
-              'VD: "Quận 1", "Bến Thành", "Nguyễn Huệ"',
+              widget.languageService.translate('example_searches'),
               style: TextStyle(fontSize: 12, color: Colors.grey[400]),
             ),
           ],
@@ -374,7 +378,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 if (place.type.isNotEmpty)
                   Text(
-                    place.type.toUpperCase(),
+                    widget.languageService.translate(place.type.toLowerCase().replaceAll(' ', '_').toUpperCase()),
                     style: TextStyle(
                       fontSize: 10,
                       color: placeColor,
@@ -418,7 +422,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 Icon(Icons.history, color: Colors.grey[600], size: 20),
                 SizedBox(width: 8),
                 Text(
-                  'Tìm kiếm gần đây',
+                  widget.languageService.translate('recent_searches'),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -435,7 +439,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     await prefs.remove('searchHistory');
                   },
                   child: Text(
-                    'Xóa tất cả',
+                    widget.languageService.translate('clear_all'),
                     style: TextStyle(fontSize: 12, color: Colors.red),
                   ),
                 ),
@@ -452,14 +456,14 @@ class _SearchScreenState extends State<SearchScreen> {
                   Icon(Icons.map_outlined, size: 64, color: Colors.grey[400]),
                   SizedBox(height: 16),
                   Text(
-                    'Tìm kiếm địa điểm',
+                    widget.languageService.translate('search_places'),
                     style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.w500),
                   ),
                   SizedBox(height: 12),
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      'Nhập tên đường, địa điểm, quận huyện để tìm kiếm',
+                      widget.languageService.translate('enter_street_place'),
                       style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                       textAlign: TextAlign.center,
                     ),
@@ -478,7 +482,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         Icon(Icons.eco, size: 16, color: Colors.green),
                         SizedBox(width: 4),
                         Text(
-                          'Miễn phí • Không cần API key',
+                          widget.languageService.translate('free_no_api_key'),
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.green.shade700,
