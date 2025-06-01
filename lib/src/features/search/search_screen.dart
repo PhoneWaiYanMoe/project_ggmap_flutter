@@ -98,11 +98,12 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
+      final countryCode = widget.languageService.languageCode == 'my' ? 'mm' : 'vn';
       final results = await _geocodingService.searchPlaces(
         query: query,
         location: widget.currentLocation, // Bias results to current location
         limit: 15,
-        countryCode: 'vn', // Focus on Vietnam
+        countryCode: countryCode, // Dynamic country code based on language
       );
 
       setState(() {

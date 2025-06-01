@@ -13,10 +13,15 @@ class LanguageSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isCompact) {
-      return _buildCompactSelector(context);
-    }
-    return _buildFullSelector(context);
+    return ListenableBuilder(
+      listenable: languageService,
+      builder: (context, child) {
+        if (isCompact) {
+          return _buildCompactSelector(context);
+        }
+        return _buildFullSelector(context);
+      },
+    );
   }
 
   Widget _buildCompactSelector(BuildContext context) {
@@ -148,15 +153,20 @@ class FloatingLanguageButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FloatingActionButton(
-      mini: true,
-      backgroundColor: Colors.white,
-      elevation: 4,
-      onPressed: () => _showLanguageBottomSheet(context),
-      child: Text(
-        languageService.currentLanguage.flag,
-        style: TextStyle(fontSize: 20),
-      ),
+    return ListenableBuilder(
+      listenable: languageService,
+      builder: (context, child) {
+        return FloatingActionButton(
+          mini: true,
+          backgroundColor: Colors.white,
+          elevation: 4,
+          onPressed: () => _showLanguageBottomSheet(context),
+          child: Text(
+            languageService.currentLanguage.flag,
+            style: TextStyle(fontSize: 20),
+          ),
+        );
+      },
     );
   }
 

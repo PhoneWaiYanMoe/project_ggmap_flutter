@@ -3,7 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppLanguage {
   vietnamese('vi', 'Tiếng Việt', '🇻🇳'),
-  english('en', 'English', '🇬🇧');
+  english('en', 'English', '🇬🇧'),
+  myanmar('my', 'မြန်မာ', '🇲🇲');
 
   final String code;
   final String name;
@@ -306,5 +307,132 @@ final Map<String, Map<String, String>> _translations = {
     // Settings/Language
     'language': 'Language',
     'change_language': 'Change Language',
+  },
+
+  'my': {
+    // Navigation & Map
+    'search_location': 'နေရာကိုရှာဖွေနေသည်...',
+    'from': 'မှ',
+    'to': 'သို့',
+    'your_location': 'သင်၏တည်နေရာ',
+    'select_destination': 'သွားမည့်နေရာကိုရွေးပါ',
+    'calculating': 'တွက်ချက်နေသည်...',
+    'km': 'ကီလိုမီတာ',
+    'minutes': 'မိနစ်',
+    'hours': 'နာရီ',
+    'eta': 'သွားရာကာလခန့်မှန်း',
+    'shortest_path': 'အတိုဆုံးလမ်းကြောင်း',
+    'total_time': 'စုစုပေါင်းအချိန်',
+    'show_turn_by_turn': 'လမ်းညွှန်ဖော်ပြရန်',
+    'turn_by_turn_navigation': 'အဆင့်လိုက်လမ်းညွှန်',
+    'close': 'ပိတ်မည်',
+    'refresh': 'ပြန်လည်သက်သက်',
+    'details': 'အသေးစိတ်',
+    'update': 'အပ်ဒိတ်လုပ်မည်',
+
+    // Data status
+    'using_live_data': 'Live ဒေတာကိုအသုံးပြုနေသည်',
+    'no_live_data': 'Live ဒေတာမရရှိပါ (API မရှိပါ)',
+
+    // Weather
+    'weather_details': 'မိုးလေဝသအသေးစိတ်',
+    'current_weather': 'လက်ရှိမိုးလေဝသ',
+    'feels_like': 'ခံစားရသောအပူချိန်',
+    'humidity': 'စိုထိုင်းဆ',
+    'wind': 'လေ',
+    'visibility': 'မြင်သာမှု',
+    'uv_index': 'အလင်းရောင် UV အညွှန်း',
+    'pressure': 'ဖိအား',
+    'air_quality': 'လေထုအရည်အသွေး',
+    'good': 'ကောင်းမွန်သည်',
+    'moderate': 'အလယ်အလတ်',
+    'unhealthy_sensitive': 'သတိပြုရန်လိုသောသူများအတွက် မကောင်းပါ',
+    'unhealthy': 'မကောင်းပါ',
+    'very_unhealthy': 'အလွန်မကောင်းပါ',
+    'hazardous': 'အန္တရာယ်ရှိပါသည်',
+    'unknown': 'မသိပါ',
+    'no_air_quality_data': 'လေထုအရည်အသွေးဒေတာမရှိပါ',
+
+    // Driving conditions
+    'driving_conditions': 'မောင်းနှင်မှုအခြေအနေများ',
+    'safe_to_drive': 'မောင်းနှင်ရန်အန္တရာယ်ကင်းသည်',
+    'be_careful': 'မောင်းနှင်စဉ် သတိထားပါ',
+    'dangerous_weather': 'အန္တရာယ်ရှိသောမိုးလေဝသ - မောင်းနှင်မှုမလိုအပ်ပါ',
+    'weather_good_for_driving': 'မောင်းနှင်ရန်အတွက် မိုးလေဝသကောင်းသည်',
+    'warnings': 'သတိပေးချက်များ',
+    'recommendations': 'အကြံပြုချက်များ',
+
+    // News
+    'local_news': 'ဒေသခံသတင်း',
+    'no_news': 'လက်ရှိသတင်းမရှိပါ',
+    'try_refresh': 'သတင်းအသစ်များရယူရန် ပြန်လည်သက်သက်ပါ',
+    'refresh_news': 'သတင်းကိုပြန်လည်သက်သက်',
+    'unknown_source': 'မသိသောရင်းမြစ်',
+    'no_title': 'ခေါင်းစဉ်မရှိပါ',
+    'no_description': 'ဖော်ပြချက်မရှိပါ',
+    'tap_to_read_more': 'ပိုမိုဖတ်ရန်နှိပ်ပါ',
+    'error_opening_article': 'ဆောင်းပါးကိုဖွင့်၍မရပါ',
+
+    // Popular places
+    'popular_places': 'အကြမ်းဖျင်းအရ နာမည်ကြီးနေရာများ',
+    'famous_places': 'နာမည်ကြီးနေရာများ',
+    'all': 'အားလုံး',
+    'food': 'အစားအစာ',
+    'shopping': 'စျေးဝယ်မှု',
+    'tourism': 'ခရီးသွား',
+    'healthcare': 'ကျန်းမာရေး',
+    'education': 'ပညာရေး',
+    'transport': 'သယ်ယူပို့ဆောင်မှု',
+    'banking': 'ဘဏ္ဍာရေး',
+    'fuel': 'ဓာတ်ဆီ',
+    'loading_places': 'နေရာများကို loadingလုပ်နေသည်..',
+    'no_places_found': 'နေရာများမတွေ့ပါ',
+    'try_another_category': 'အခြားအမျိုးအစားတစ်ခုရွေးပါ သို့မဟုတ် ပြန်လည်ဖွင့်ပါ',
+    'selected_as_destination': '"{name}" ကို ဦးတည်ရာအဖြစ် ရွေးချယ်ပြီးပါပြီ',
+
+    // Search
+    'search_places': 'နေရာများ ရှာဖွေပါ',
+    'enter_street_place': 'လမ်းအမည်၊ နေရာ၊ မြို့နယ်...',
+    'recent_searches': 'မကြာသေးမီက ရှာဖွေမှုများ',
+    'clear_all': 'အားလုံးဖျက်ရန်',
+    'searching': 'ရှာဖွေနေသည်...',
+    'no_results': 'ရလဒ်မရှိပါ',
+    'try_different_keywords': 'အခြားသောသော keyword များဖြင့် ရှာဖွေပါ',
+    'example_searches': 'ဥပမာ - "ဗိုလ်တစ်ထောင်မြို့နယ်", "ဗန်းတင်", "ဗိုလ်ချုပ်အောင်ဆန်းလမ်း"',
+    'free_no_api_key': 'အခမဲ့ • API key မလိုအပ်ပါ',
+    'results': 'ရလဒ်များ',
+
+    // Hazards
+    'report_hazard': 'အန္တရာယ်အခြေအနေ တင်ပြပါ',
+    'at_current_location': 'သင့်လက်ရှိတည်နေရာတွင်',
+    'hazard_type': 'အန္တရာယ်အမျိုးအစား',
+    'accident': 'မတော်တဆမှု',
+    'natural_hazard': 'သဘာဝဘေးအန္တရာယ်',
+    'road_work': 'လမ်းပြုပြင်ခြင်း',
+    'other': 'အခြား',
+    'detailed_description': 'အသေးစိတ်ဖော်ပြချက်',
+    'please_enter_description': 'ဖော်ပြချက်ရေးပါ',
+    'duration': 'အချိန်ကြာမြင့်မှု',
+    '15_minutes': '၁၅ မိနစ်',
+    '30_minutes': '၃၀ မိနစ်',
+    '1_hour': '၁ နာရီ',
+    '3_hours': '၃ နာရီ',
+    '6_hours': '၆ နာရီ',
+    '12_hours': '၁၂ နာရီ',
+    '24_hours': '၂၄ နာရီ',
+    'submit_report': 'တင်ပြရန်',
+    'please_fill_all_fields': 'အချက်အလက်အားလုံး ဖြည့်ပါ',
+    'error_reporting': 'တင်ပြရာတွင် ပြဿနာဖြစ်ပေါ်သည်',
+    'hazard_reported_success': 'အန္တရာယ်အခြေအနေကို အောင်မြင်စွာတင်ပြပြီးပါပြီ!',
+
+    // Time ago
+    'days_ago': 'ရက်အနေနှင့် ယခင်က',
+    'hours_ago': 'နာရီအနေနှင့် ယခင်က',
+    'minutes_ago': 'မိနစ်အနေနှင့် ယခင်က',
+    'just_now': 'အခုတင်',
+
+    // Settings/Language
+    'language': 'ဘာသာစကား',
+    'change_language': 'ဘာသာစကားပြောင်းရန်',
   },
 };

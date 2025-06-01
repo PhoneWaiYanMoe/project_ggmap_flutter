@@ -33,8 +33,8 @@ class MapView extends StatefulWidget {
 class _MapViewState extends State<MapView> {
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.languageService,
+    return ListenableBuilder(
+      listenable: widget.languageService,
       builder: (context, _) {
         return AnimatedBuilder(
           animation: widget.model,
