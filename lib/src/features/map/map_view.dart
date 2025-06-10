@@ -601,20 +601,20 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          _buildActionButton(
-            Icons.refresh,
-            () => _handleRefreshRoute(context),
-            Colors.grey.shade100,
-            Colors.grey.shade700,
-          ),
-          const SizedBox(width: 8),
-          _buildActionButton(
-            Icons.share,
-            () => _handleShareRoute(context),
-            Colors.grey.shade100,
-            Colors.grey.shade700,
-          ),
+          // const SizedBox(width: 12),
+          // _buildActionButton(
+          //   Icons.refresh,
+          //   () => _handleRefreshRoute(context),
+          //   Colors.grey.shade100,
+          //   Colors.grey.shade700,
+          // ),
+          // const SizedBox(width: 8),
+          // _buildActionButton(
+          //   Icons.share,
+          //   () => _handleShareRoute(context),
+          //   Colors.grey.shade100,
+          //   Colors.grey.shade700,
+          // ),
         ],
       ),
     );
@@ -761,39 +761,39 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
     }
   }
 
-  void _handleRefreshRoute(BuildContext context) async {
-    await widget.model.regenerateShortestPath();
-    _showSnackBar(
-      context,
-      widget.languageService.translate('path_recalculated'),
-      backgroundColor: Colors.green,
-    );
-  }
+  // void _handleRefreshRoute(BuildContext context) async {
+  //   await widget.model.regenerateShortestPath();
+  //   _showSnackBar(
+  //     context,
+  //     widget.languageService.translate('path_recalculated'),
+  //     backgroundColor: Colors.green,
+  //   );
+  // }
 
-  void _handleShareRoute(BuildContext context) async {
-    try {
-      final filePath = await widget.model.getShortestPathFilePath();
-      final file = File(filePath);
-      if (await file.exists()) {
-        await Share.shareXFiles(
-          [XFile(filePath)],
-          text: widget.languageService.translate('share_path_text'),
-        );
-      } else {
-        _showSnackBar(
-          context,
-          widget.languageService.translate('path_file_not_found'),
-          backgroundColor: Colors.orange,
-        );
-      }
-    } catch (e) {
-      _showSnackBar(
-        context,
-        'Error sharing route',
-        backgroundColor: Colors.red,
-      );
-    }
-  }
+  // void _handleShareRoute(BuildContext context) async {
+  //   try {
+  //     final filePath = await widget.model.getShortestPathFilePath();
+  //     final file = File(filePath);
+  //     if (await file.exists()) {
+  //       await Share.shareXFiles(
+  //         [XFile(filePath)],
+  //         text: widget.languageService.translate('share_path_text'),
+  //       );
+  //     } else {
+  //       _showSnackBar(
+  //         context,
+  //         widget.languageService.translate('path_file_not_found'),
+  //         backgroundColor: Colors.orange,
+  //       );
+  //     }
+  //   } catch (e) {
+  //     _showSnackBar(
+  //       context,
+  //       'Error sharing route',
+  //       backgroundColor: Colors.red,
+  //     );
+  //   }
+  // }
 
   void _showSnackBar(BuildContext context, String message, {Widget? icon, Color? backgroundColor}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1099,75 +1099,7 @@ class _MapViewState extends State<MapView> with TickerProviderStateMixin {
               ),
             ),
             // Debug info with more details
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: widget.model.newsArticles.isEmpty 
-                    ? Colors.orange.withOpacity(0.1)
-                    : Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: widget.model.newsArticles.isEmpty 
-                      ? Colors.orange.withOpacity(0.3)
-                      : Colors.green.withOpacity(0.3),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.model.newsArticles.isEmpty ? '🔍 Debug Info:' : '✅ News Status:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        color: widget.model.newsArticles.isEmpty 
-                          ? Colors.orange[800] 
-                          : Colors.green[800],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Articles count: ${widget.model.newsArticles.length}',
-                      style: TextStyle(
-                        fontSize: 12, 
-                        color: widget.model.newsArticles.isEmpty 
-                          ? Colors.orange[700] 
-                          : Colors.green[700],
-                      ),
-                    ),
-                 
-                    Text(
-                      'Location: ${widget.model.currentLocation?.latitude.toStringAsFixed(4) ?? 'null'}, ${widget.model.currentLocation?.longitude.toStringAsFixed(4) ?? 'null'}',
-                      style: TextStyle(
-                        fontSize: 12, 
-                        color: widget.model.newsArticles.isEmpty 
-                          ? Colors.orange[700] 
-                          : Colors.green[700],
-                      ),
-                    ),
-                    Text(
-                      'From: ${widget.model.fromPlaceName ?? 'null'}',
-                      style: TextStyle(
-                        fontSize: 12, 
-                        color: widget.model.newsArticles.isEmpty 
-                          ? Colors.orange[700] 
-                          : Colors.green[700],
-                      ),
-                    ),
-                    Text(
-                      'To: ${widget.model.toPlaceName ?? 'null'}',
-                      style: TextStyle(
-                        fontSize: 12, 
-                        color: widget.model.newsArticles.isEmpty 
-                          ? Colors.orange[700] 
-                          : Colors.green[700],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+
             const SizedBox(height: 8),
             // Content
             Expanded(child: _buildNewsContent()),
