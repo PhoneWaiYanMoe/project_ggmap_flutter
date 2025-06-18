@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import '../../services/graphhopper_service.dart';
 import '../../services/overpass_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/scheduler.dart';
@@ -37,38 +38,72 @@ double _euclideanDistance(String from, String to, Map<String, LatLng> cameraCoor
   return finalDistance;
 }
 
+List<String> _aStar(
+    String start,
+    String goal,
+    Map<String, Map<String, double>> travelTimes,
+    Map<String, Map<String, double>> distances,
+    Map<String, LatLng> cameraCoords,
+    Map<String, double> vehicleCounts,
+    Map<String, double> maxSpeeds,
+    Map<String, double> criticalCounts) {
+  final totalStart = DateTime.now();
+  print('⏱️ [A*] Starting A* from $start to $goal');
 
-List<String> _aStar(String start, String goal, Map<String, Map<String, double>> travelTimes,
-    Map<String, Map<String, double>> distances, Map<String, LatLng> cameraCoords,
-    Map<String, double> vehicleCounts, Map<String, double> maxSpeeds, Map<String, double> criticalCounts) {
   final openSet = <String>{start};
   final cameFrom = <String, String>{};
   final gScore = <String, double>{start: 0};
-  final fScore = <String, double>{start: _heuristic(start, goal, distances, cameraCoords, vehicleCounts, maxSpeeds, criticalCounts)};
+  final fScore = <String, double>{
+    start: _heuristic(start, goal, distances, cameraCoords, vehicleCounts, maxSpeeds, criticalCounts)
+  };
+
+  int iterations = 0;
+  int maxOpenSetSize = openSet.length;
 
   while (openSet.isNotEmpty) {
+    iterations++;
+    maxOpenSetSize = max(maxOpenSetSize, openSet.length);
+
+    final selectStart = DateTime.now();
     final current = openSet.reduce((a, b) => fScore[a]! < fScore[b]! ? a : b);
+    print(
+        '⏱️ [A*] Iteration $iterations: Selected node $current (Select took: ${DateTime.now().difference(selectStart).inMicroseconds}µs)');
+
     if (current == goal) {
-      return _reconstructPath(cameFrom, current);
+      final path = _reconstructPath(cameFrom, current);
+      print('⏱️ [A*] Found path after $iterations iterations: ${path.join(" → ")}');
+      print('⏱️ [A*] Max open set size: $maxOpenSetSize');
+      print('⏱️ [A*] Total A* Execution: ${DateTime.now().difference(totalStart).inMilliseconds}ms');
+      return path;
     }
+
     openSet.remove(current);
+    final neighborStart = DateTime.now();
     for (var neighbor in travelTimes[current]!.keys) {
       final tentativeGScore = gScore[current]! + travelTimes[current]![neighbor]!;
       if (!gScore.containsKey(neighbor) || tentativeGScore < gScore[neighbor]!) {
         cameFrom[neighbor] = current;
         gScore[neighbor] = tentativeGScore;
-        fScore[neighbor] = gScore[neighbor]! + _heuristic(neighbor, goal, distances, cameraCoords, vehicleCounts, maxSpeeds, criticalCounts);
+        final heuristicStart = DateTime.now();
+        fScore[neighbor] = gScore[neighbor]! +
+            _heuristic(neighbor, goal, distances, cameraCoords, vehicleCounts, maxSpeeds, criticalCounts);
+        print(
+            '⏱️ [A*] Heuristic for $neighbor to $goal took: ${DateTime.now().difference(heuristicStart).inMicroseconds}µs');
         openSet.add(neighbor);
       }
     }
+    print('⏱️ [A*] Neighbor processing took: ${DateTime.now().difference(neighborStart).inMicroseconds}µs');
   }
+
+  print('⏱️ [A*] No path found after $iterations iterations');
+  print('⏱️ [A*] Total A* Execution: ${DateTime.now().difference(totalStart).inMilliseconds}ms');
   return [];
 }
 
-double _heuristic(String from, String to, Map<String, Map<String, double>> distances,
-    Map<String, LatLng> cameraCoords, Map<String, double> vehicleCounts,
-    Map<String, double> maxSpeeds, Map<String, double> criticalCounts) {
-  final distance = distances[from]?.containsKey(to) == true ? distances[from]![to]! : _euclideanDistance(from, to, cameraCoords);
+double _heuristic(String from, String to, Map<String, Map<String, double>> distances, Map<String, LatLng> cameraCoords,
+    Map<String, double> vehicleCounts, Map<String, double> maxSpeeds, Map<String, double> criticalCounts) {
+  final distance =
+      distances[from]?.containsKey(to) == true ? distances[from]![to]! : _euclideanDistance(from, to, cameraCoords);
   final estimatedSpeed = _greenshieldSpeed(from, vehicleCounts, maxSpeeds, criticalCounts);
   return (distance / estimatedSpeed) * 60; // Heuristic as travel time in minutes
 }
@@ -82,8 +117,8 @@ List<String> _reconstructPath(Map<String, String> cameFrom, String current) {
   return path;
 }
 
-double _greenshieldSpeed(String camera, Map<String, double> vehicleCounts,
-    Map<String, double> maxSpeeds, Map<String, double> criticalCounts) {
+double _greenshieldSpeed(String camera, Map<String, double> vehicleCounts, Map<String, double> maxSpeeds,
+    Map<String, double> criticalCounts) {
   final vehicleCount = vehicleCounts[camera] ?? 0.0;
   final maxSpeed = maxSpeeds[camera] ?? 40.0;
   final criticalCount = criticalCounts[camera] ?? 100.0;
@@ -92,11 +127,8 @@ double _greenshieldSpeed(String camera, Map<String, double> vehicleCounts,
   return estimatedSpeed < 5.0 ? 5.0 : estimatedSpeed; // Minimum speed 5 km/h
 }
 
-Map<String, Map<String, double>> _calculateTravelTimes(
-    Map<String, double> vehicleCounts,
-    Map<String, Map<String, double>> distances,
-    Map<String, double> maxSpeeds,
-    Map<String, double> criticalCounts) {
+Map<String, Map<String, double>> _calculateTravelTimes(Map<String, double> vehicleCounts,
+    Map<String, Map<String, double>> distances, Map<String, double> maxSpeeds, Map<String, double> criticalCounts) {
   final travelTimes = <String, Map<String, double>>{};
 
   for (var from in distances.keys) {
@@ -147,7 +179,7 @@ class MapModel extends ChangeNotifier {
   void _logDataSource(Map<String, double> vehicleCounts, Map<String, double> densities, bool isLive) {
     final timestamp = DateTime.now().toIso8601String();
     final source = isLive ? "LIVE API" : "SYNTHETIC/FALLBACK";
-    
+
     print('=== DATA SOURCE UPDATE ===');
     print('[$timestamp] Using: $source');
     print('[$timestamp] Vehicle Counts: $vehicleCounts');
@@ -155,6 +187,7 @@ class MapModel extends ChangeNotifier {
     print('[$timestamp] _usingLiveData flag: $_usingLiveData');
     print('========================');
   }
+
   // Weather fields
   Map<String, dynamic>? _currentWeather;
   Map<String, dynamic>? _weatherForecast;
@@ -193,7 +226,7 @@ class MapModel extends ChangeNotifier {
   Map<String, double>? _savedVehicleCounts;
   Map<String, double>? _savedDensities;
 
-LatLng? get currentLocation => _currentLocation;
+  LatLng? get currentLocation => _currentLocation;
   LatLng? get fromLocation => _fromLocation;
   LatLng? get toLocation => _toLocation;
   Set<Polyline> get polylines => _polylines;
@@ -218,6 +251,10 @@ LatLng? get currentLocation => _currentLocation;
   List<Hazard> get reportedHazards => _reportedHazards;
   Set<Marker> get hazardMarkers => _hazardMarkers;
 
+  Timer? _liveDataUpdateTimer; // Separate timer for live data updates
+  Timer? _navigationUpdateTimer; // Separate timer for navigation updates
+  bool _continuousUpdateEnabled = true; // Flag to control continuous updates
+  DateTime? _lastSuccessfulFetch; // Track last successful API call
   MapModel() {
     _init();
   }
@@ -229,12 +266,106 @@ LatLng? get currentLocation => _currentLocation;
     _loadCameraMarkers();
     await _requestStoragePermission();
     await _loadCriticalVehicleCounts();
+
+    await _startContinuousLiveDataUpdates();
+
     await _fetchCurrentVehicleCounts();
     await fetchWeatherData();
     await _initHazards();
     await _fetchNews();
+    await debugEnvironmentVariables();
+    debugCurrentTrafficStatus();
+    // Set Camera A as default starting point and Camera B as default destination
+    await _setDefaultDebugLocations();
+
     print('MapModel initialization completed at ${DateTime.now()}');
     notifyListeners();
+  }
+
+  // Add this new method to set default debug locations
+  Future<void> _setDefaultDebugLocations() async {
+    print('🔧 === SETTING DEBUG DEFAULT LOCATIONS ===');
+
+    // Set Camera A as starting point (from location)
+    _fromLocation = _cameraCoords['J']!;
+    _fromPlaceName = "J : Điện Biên Phủ - CMT8";
+
+    // Set Camera B as destination (to location)
+    _toLocation = _cameraCoords['D']!;
+    _toPlaceName = "D : gã sáu Nguyễn Tri Phương 1";
+
+    // Enable two search bars since we have both locations
+    _showTwoSearchBars = true;
+
+    print('📍 Default FROM location set to Camera J: $_fromLocation');
+    print('📍 Default TO location set to Camera D: $_toLocation');
+    print('✅ Debug locations configured');
+    print('🔧 === END DEBUG SETUP ===');
+
+    // Update camera markers to reflect the new from/to locations
+    _updateCameraMarkers();
+
+    // Optionally calculate the initial route
+    await _calculateAndFindShortestPath();
+  }
+
+// NEW METHOD: Start continuous live data updates
+  Future<void> _startContinuousLiveDataUpdates() async {
+    print('🔄 Starting continuous live data updates...');
+
+    // Initial fetch
+    await _fetchCurrentVehicleCounts();
+
+    // Start timer for continuous updates (every 30 seconds)
+    _stopContinuousLiveDataUpdates(); // Stop any existing timer
+    _liveDataUpdateTimer = Timer.periodic(Duration(seconds: 30), (timer) async {
+      if (!_continuousUpdateEnabled) {
+        timer.cancel();
+        return;
+      }
+
+      print('⏰ [CONTINUOUS UPDATE] Fetching live data at ${DateTime.now()}');
+      await _fetchCurrentVehicleCounts();
+
+      // If we're navigating and data changed significantly, recalculate route
+      if (_isNavigating && _shouldRecalculateRoute()) {
+        print('🔄 [CONTINUOUS UPDATE] Significant traffic change detected, recalculating route');
+        await _calculateAndFindShortestPath();
+      }
+
+      // Update polylines if we have an active route
+      if (_shortestPath.isNotEmpty) {
+        await _updatePolylines();
+      }
+    });
+
+    print('✅ Continuous live data updates started (every 30 seconds)');
+  }
+
+// NEW METHOD: Stop continuous updates
+  void _stopContinuousLiveDataUpdates() {
+    _liveDataUpdateTimer?.cancel();
+    _liveDataUpdateTimer = null;
+    print('⏹️ Stopped continuous live data updates');
+  }
+
+// NEW METHOD: Check if route should be recalculated
+  bool _shouldRecalculateRoute() {
+    if (_savedVehicleCounts == null || _shortestPath.isEmpty) return false;
+
+    // Check if any camera in the current path has significant traffic change
+    for (String camera in _shortestPath) {
+      final oldCount = _savedVehicleCounts?[camera] ?? 0.0;
+      final newCount = _lastVehicleCounts[camera] ?? 0.0;
+      final change = (newCount - oldCount).abs();
+
+      // If change is more than 15 vehicles, recalculate
+      if (change > 15.0) {
+        print('📊 Significant change at camera $camera: $oldCount → $newCount (change: $change)');
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _loadCriticalVehicleCounts() async {
@@ -256,15 +387,35 @@ LatLng? get currentLocation => _currentLocation;
       } else {
         print('No critical vehicle counts file found, using defaults at ${DateTime.now()}');
         _criticalVehicleCounts = {
-          'A': 100.0, 'B': 100.0, 'C': 100.0, 'D': 100.0, 'E': 100.0, 'F': 100.0,
-          'G': 100.0, 'H': 100.0, 'I': 100.0, 'J': 100.0, 'K': 100.0, 'L': 100.0,
+          'A': 100.0,
+          'B': 100.0,
+          'C': 100.0,
+          'D': 100.0,
+          'E': 100.0,
+          'F': 100.0,
+          'G': 100.0,
+          'H': 100.0,
+          'I': 100.0,
+          'J': 100.0,
+          'K': 100.0,
+          'L': 100.0,
         };
       }
     } catch (e) {
       print('Error loading critical vehicle counts: $e at ${DateTime.now()}');
       _criticalVehicleCounts = {
-        'A': 100.0, 'B': 100.0, 'C': 100.0, 'D': 100.0, 'E': 100.0, 'F': 100.0,
-        'G': 100.0, 'H': 100.0, 'I': 100.0, 'J': 100.0, 'K': 100.0, 'L': 100.0,
+        'A': 100.0,
+        'B': 100.0,
+        'C': 100.0,
+        'D': 100.0,
+        'E': 100.0,
+        'F': 100.0,
+        'G': 100.0,
+        'H': 100.0,
+        'I': 100.0,
+        'J': 100.0,
+        'K': 100.0,
+        'L': 100.0,
       };
     }
   }
@@ -411,8 +562,7 @@ LatLng? get currentLocation => _currentLocation;
     final dLat = lat2Rad - lat1Rad;
     final dLon = lon2Rad - lon1Rad;
 
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1Rad) * cos(lat2Rad) * sin(dLon / 2) * sin(dLon / 2);
+    final a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1Rad) * cos(lat2Rad) * sin(dLon / 2) * sin(dLon / 2);
     final c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
     return earthRadius * c;
@@ -430,9 +580,43 @@ LatLng? get currentLocation => _currentLocation;
 
   @override
   void dispose() {
+    _continuousUpdateEnabled = false; // Disable continuous updates
+
     _stopDensityUpdates();
     _stopHazardUpdates();
     super.dispose();
+  }
+
+// NEW METHOD: Manually refresh live data (for testing)
+  Future<void> forceLiveDataRefresh() async {
+    print('🔄 [MANUAL REFRESH] Force refreshing live data...');
+    await _fetchCurrentVehicleCounts();
+
+    if (_shortestPath.isNotEmpty) {
+      await _updatePolylines();
+    }
+
+    notifyListeners();
+  }
+
+// NEW METHOD: Get time since last successful fetch
+  String getTimeSinceLastFetch() {
+    if (_lastSuccessfulFetch == null) return 'Never';
+
+    final duration = DateTime.now().difference(_lastSuccessfulFetch!);
+    if (duration.inMinutes < 1) {
+      return '${duration.inSeconds} seconds ago';
+    } else if (duration.inHours < 1) {
+      return '${duration.inMinutes} minutes ago';
+    } else {
+      return '${duration.inHours} hours ago';
+    }
+  }
+
+// NEW METHOD: Check if live data is fresh
+  bool isLiveDataFresh() {
+    if (_lastSuccessfulFetch == null) return false;
+    return DateTime.now().difference(_lastSuccessfulFetch!).inMinutes < 2;
   }
 
   Future<void> _requestLocationPermission() async {
@@ -657,18 +841,44 @@ LatLng? get currentLocation => _currentLocation;
   Future<void> toggleNavigation() async {
     _isNavigating = !_isNavigating;
     _followUser = _isNavigating;
-    print('Navigation ${_isNavigating ? 'started' : 'stopped'} from $_fromPlaceName to $_toPlaceName at ${DateTime.now()}');
+
+    print(
+        'Navigation ${_isNavigating ? 'started' : 'stopped'} from $_fromPlaceName to $_toPlaceName at ${DateTime.now()}');
+
     if (_isNavigating && _fromLocation != null && _toLocation != null) {
       await _calculateAndFindShortestPath();
-      _startDensityUpdates();
+      _startNavigationUpdates(); // Start navigation-specific updates
     } else {
       _shortestPath = [];
       _totalTravelTime = 0.0;
       _polylines.clear();
       _updateCameraMarkers();
-      _stopDensityUpdates();
+      _stopNavigationUpdates(); // Stop navigation updates but keep live data updates
     }
+
     notifyListeners();
+  }
+
+// NEW METHOD: Start navigation-specific updates (separate from live data)
+  void _startNavigationUpdates() {
+    _stopNavigationUpdates();
+    _navigationUpdateTimer = Timer.periodic(Duration(seconds: 15), (timer) async {
+      if (!_isNavigating) {
+        timer.cancel();
+        return;
+      }
+
+      print('🧭 [NAVIGATION UPDATE] Updating current location and route at ${DateTime.now()}');
+      await getCurrentLocation(); // Update current location
+      await _updateCurrentCamera(); // Check if user moved to different camera
+      await _fetchNews(); // Update news
+    });
+  }
+
+// NEW METHOD: Stop navigation updates
+  void _stopNavigationUpdates() {
+    _navigationUpdateTimer?.cancel();
+    _navigationUpdateTimer = null;
   }
 
   void toggleFollowUser() {
@@ -678,18 +888,18 @@ LatLng? get currentLocation => _currentLocation;
 
   void _loadCameraMarkers() {
     final cameraLocations = [
-      {'id': 'A', 'lat': 10.767778, 'lng': 106.671694, 'title': 'Lý Thái Tổ - Sư Vạn Hạnh'},
-      {'id': 'B', 'lat': 10.773833, 'lng': 106.677778, 'title': '3/2 – Cao Thắng'},
-      {'id': 'C', 'lat': 10.772722, 'lng': 106.679028, 'title': 'Điện Biên Phủ - Cao Thắng'},
-      {'id': 'D', 'lat': 10.759694, 'lng': 106.668889, 'title': 'Ngã sáu Nguyễn Tri Phương 1'},
-      {'id': 'E', 'lat': 10.760056, 'lng': 106.669000, 'title': 'Ngã sáu Nguyễn Tri Phương'},
-      {'id': 'F', 'lat': 10.768806, 'lng': 106.652639, 'title': 'Lê Đại Hành 2'},
-      {'id': 'G', 'lat': 10.766222, 'lng': 106.679083, 'title': 'Lý Thái Tổ - Nguyễn Đình Chiểu'},
-      {'id': 'H', 'lat': 10.765417, 'lng': 106.681306, 'title': 'Ngã sáu Cộng Hòa 1'},
-      {'id': 'I', 'lat': 10.765111, 'lng': 106.681639, 'title': 'Ngã sáu Cộng Hòa'},
-      {'id': 'J', 'lat': 10.776667, 'lng': 106.683667, 'title': 'Điện Biên Phủ - CMT8'},
-      {'id': 'K', 'lat': 10.777778, 'lng': 106.6820, 'title': 'Nút giao Công Trường Dân Chủ'},
-      {'id': 'L', 'lat': 10.777694, 'lng': 106.681361, 'title': 'Nút giao Công Trường Dân Chủ 1'},
+      {'id': 'A', 'lat': 10.767778, 'lng': 106.671694, 'title': 'A : Lý Thái Tổ - Sư Vạn Hạnh'},
+      {'id': 'B', 'lat': 10.773833, 'lng': 106.677778, 'title': 'B : 3/2 – Cao Thắng'},
+      {'id': 'C', 'lat': 10.772722, 'lng': 106.679028, 'title': 'C : Điện Biên Phủ - Cao Thắng'},
+      {'id': 'D', 'lat': 10.759694, 'lng': 106.668889, 'title': 'D : gã sáu Nguyễn Tri Phương 1'},
+      {'id': 'E', 'lat': 10.760056, 'lng': 106.669000, 'title': 'E : Ngã sáu Nguyễn Tri Phương'},
+      {'id': 'F', 'lat': 10.768806, 'lng': 106.652639, 'title': 'F : Lê Đại Hành 2'},
+      {'id': 'G', 'lat': 10.766222, 'lng': 106.679083, 'title': 'G : Lý Thái Tổ - Nguyễn Đình Chiểu'},
+      {'id': 'H', 'lat': 10.765417, 'lng': 106.681306, 'title': 'H : Ngã sáu Cộng Hòa 1'},
+      {'id': 'I', 'lat': 10.765111, 'lng': 106.681639, 'title': 'I : Ngã sáu Cộng Hòa'},
+      {'id': 'J', 'lat': 10.776667, 'lng': 106.683667, 'title': 'J : Điện Biên Phủ - CMT8'},
+      {'id': 'K', 'lat': 10.777778, 'lng': 106.6820, 'title': 'K : Nút giao Công Trường Dân Chủ'},
+      {'id': 'L', 'lat': 10.777694, 'lng': 106.681361, 'title': 'L : Nút giao Công Trường Dân Chủ 1'},
     ];
 
     _cameraMarkers.clear();
@@ -709,18 +919,18 @@ LatLng? get currentLocation => _currentLocation;
   void _updateCameraMarkers() {
     _cameraMarkers.clear();
     final cameraLocations = [
-      {'id': 'A', 'lat': 10.767778, 'lng': 106.671694, 'title': 'Lý Thái Tổ - Sư Vạn Hạnh'},
-      {'id': 'B', 'lat': 10.773833, 'lng': 106.677778, 'title': '3/2 – Cao Thắng'},
-      {'id': 'C', 'lat': 10.772722, 'lng': 106.679028, 'title': 'Điện Biên Phủ - Cao Thắng'},
-      {'id': 'D', 'lat': 10.759694, 'lng': 106.668889, 'title': 'Ngã sáu Nguyễn Tri Phương 1'},
-      {'id': 'E', 'lat': 10.760056, 'lng': 106.669000, 'title': 'Ngã sáu Nguyễn Tri Phương'},
-      {'id': 'F', 'lat': 10.768806, 'lng': 106.652639, 'title': 'Lê Đại Hành 2'},
-      {'id': 'G', 'lat': 10.766222, 'lng': 106.679083, 'title': 'Lý Thái Tổ - Nguyễn Đình Chiểu'},
-      {'id': 'H', 'lat': 10.765417, 'lng': 106.681306, 'title': 'Ngã sáu Cộng Hòa 1'},
-      {'id': 'I', 'lat': 10.765111, 'lng': 106.681639, 'title': 'Ngã sáu Cộng Hòa'},
-      {'id': 'J', 'lat': 10.776667, 'lng': 106.683667, 'title': 'Điện Biên Phủ - CMT8'},
-      {'id': 'K', 'lat': 10.777778, 'lng': 106.6820, 'title': 'Nút giao Công Trường Dân Chủ'},
-      {'id': 'L', 'lat': 10.777694, 'lng': 106.681361, 'title': 'Nút giao Công Trường Dân Chủ 1'},
+      {'id': 'A', 'lat': 10.767778, 'lng': 106.671694, 'title': 'A : Lý Thái Tổ - Sư Vạn Hạnh'},
+      {'id': 'B', 'lat': 10.773833, 'lng': 106.677778, 'title': 'B : 3/2 – Cao Thắng'},
+      {'id': 'C', 'lat': 10.772722, 'lng': 106.679028, 'title': 'C : Điện Biên Phủ - Cao Thắng'},
+      {'id': 'D', 'lat': 10.759694, 'lng': 106.668889, 'title': 'D : Ngã sáu Nguyễn Tri Phương 1'},
+      {'id': 'E', 'lat': 10.760056, 'lng': 106.669000, 'title': 'E : Ngã sáu Nguyễn Tri Phương'},
+      {'id': 'F', 'lat': 10.768806, 'lng': 106.652639, 'title': 'F : Lê Đại Hành 2'},
+      {'id': 'G', 'lat': 10.766222, 'lng': 106.679083, 'title': 'G :Lý Thái Tổ - Nguyễn Đình Chiểu'},
+      {'id': 'H', 'lat': 10.765417, 'lng': 106.681306, 'title': 'H :Ngã sáu Cộng Hòa 1'},
+      {'id': 'I', 'lat': 10.765111, 'lng': 106.681639, 'title': 'I : Ngã sáu Cộng Hòa'},
+      {'id': 'J', 'lat': 10.776667, 'lng': 106.683667, 'title': 'J : Điện Biên Phủ - CMT8'},
+      {'id': 'K', 'lat': 10.777778, 'lng': 106.6820, 'title': ' K : Nút giao Công Trường Dân Chủ'},
+      {'id': 'L', 'lat': 10.777694, 'lng': 106.681361, 'title': 'L : Nút giao Công Trường Dân Chủ 1'},
     ];
 
     String? fromCamera = _fromLocation != null ? _findNearestCamera(_fromLocation!) : null;
@@ -748,7 +958,8 @@ LatLng? get currentLocation => _currentLocation;
       );
     }
 
-    print('Updated camera markers: fromCamera=$fromCamera (green), toCamera=$toCamera (red), others (blue) at ${DateTime.now()}');
+    print(
+        'Updated camera markers: fromCamera=$fromCamera (green), toCamera=$toCamera (red), others (blue) at ${DateTime.now()}');
     notifyListeners();
   }
 
@@ -814,32 +1025,32 @@ LatLng? get currentLocation => _currentLocation;
 
   Timer? _densityUpdateTimer;
 
-  void _startDensityUpdates() {
-    _stopDensityUpdates();
-    _densityUpdateTimer = Timer.periodic(Duration(seconds: 30), (timer) async {
-      if (!_isNavigating) {
-        timer.cancel();
-        return;
-      }
-      print('Periodic vehicle count and news update triggered at ${DateTime.now()}');
-      await _fetchCurrentVehicleCounts();
-      await _updatePolylines();
-      await _fetchNews();
-      final shouldRecalculate = _shortestPath.any((camera) {
-        final oldCount = _savedVehicleCounts?[camera] ?? 0.0;
-        final newCount = _lastVehicleCounts[camera] ?? 0.0;
-        return (newCount - oldCount).abs() > 20.0;
-      });
-      if (shouldRecalculate) {
-        print('Significant vehicle count change detected, recalculating shortest path at ${DateTime.now()}');
-        await _calculateAndFindShortestPath();
-      }
-    });
-  }
+  // void _startDensityUpdates() {
+  //   _stopDensityUpdates();
+  //   _densityUpdateTimer = Timer.periodic(Duration(seconds: 30), (timer) async {
+  //     if (!_isNavigating) {
+  //       timer.cancel();
+  //       return;
+  //     }
+  //     print('Periodic vehicle count and news update triggered at ${DateTime.now()}');
+  //     await _fetchCurrentVehicleCounts();
+  //     await _updatePolylines();
+  //     await _fetchNews();
+  //     final shouldRecalculate = _shortestPath.any((camera) {
+  //       final oldCount = _savedVehicleCounts?[camera] ?? 0.0;
+  //       final newCount = _lastVehicleCounts[camera] ?? 0.0;
+  //       return (newCount - oldCount).abs() > 20.0;
+  //     });
+  //     if (shouldRecalculate) {
+  //       print('Significant vehicle count change detected, recalculating shortest path at ${DateTime.now()}');
+  //       await _calculateAndFindShortestPath();
+  //     }
+  //   });
+  // }
 
   void _stopDensityUpdates() {
-    _densityUpdateTimer?.cancel();
-    _densityUpdateTimer = null;
+    _stopNavigationUpdates(); // Only stop navigation updates
+    // Keep continuous live data updates running
     _newsUpdateTimer?.cancel();
     _newsUpdateTimer = null;
   }
@@ -967,178 +1178,163 @@ LatLng? get currentLocation => _currentLocation;
 
     while (attempt < maxRetries) {
       try {
-        final url = Uri.parse('http://127.0.0.1:10000//live-vehicle-counts');
-        _logApiStatus('_fetchCurrentVehicleCounts', true, additionalInfo: 'Attempting API call to $url (Attempt ${attempt + 1}/$maxRetries)');
-        
+        final url = Uri.parse('http://192.168.22.105:10000/live-densities');
+        _logApiStatus('_fetchCurrentVehicleCounts', true,
+            additionalInfo: 'Attempting API call to $url (Attempt ${attempt + 1}/$maxRetries)');
+
         final response = await http.get(url).timeout(Duration(seconds: 10));
-        
-        print('🌐 HTTP Response Details:');
-        print('   Status Code: ${response.statusCode}');
-        print('   Headers: ${response.headers}');
-        print('   Body Length: ${response.body.length} characters');
-        print('   Body Preview: ${response.body.length > 200 ? response.body.substring(0, 200) + "..." : response.body}');
 
         if (response.statusCode != 200) {
-          _logApiStatus('_fetchCurrentVehicleCounts', false, additionalInfo: 'API returned non-200 status: ${response.statusCode}');
+          _logApiStatus('_fetchCurrentVehicleCounts', false,
+              additionalInfo: 'API returned non-200 status: ${response.statusCode}');
           throw Exception('Non-200 status code: ${response.statusCode}');
         }
 
         final dataJson = jsonDecode(response.body);
-        _debugData(dataJson);
 
         if (dataJson is! Map || !dataJson.containsKey('cameras')) {
           _logApiStatus('_fetchCurrentVehicleCounts', false, additionalInfo: 'Invalid API response format');
           throw Exception('Invalid data format');
         }
 
+        // Process the live data
         Map<String, double> newVehicleCounts = {};
         Map<String, double> newDensities = {};
-        bool dataChanged = false;
         final cameras = dataJson['cameras'] as Map<String, dynamic>;
 
-        print('🔍 Processing API Data:');
         for (var entry in cameras.entries) {
-          double? vehicleCount;
-          double? density;
-          String? source;
+          double vehicleCount = 15.0; // default
+          double density = 15.0; // default
 
           if (entry.value is Map) {
             final cameraData = entry.value as Map<String, dynamic>;
-            if (cameraData.containsKey('vehicle_count') && cameraData['vehicle_count'] is num) {
-              vehicleCount = cameraData['vehicle_count'].toDouble();
-            } else if (cameraData.containsKey('vehicle_count') && cameraData['vehicle_count'] is String) {
-              vehicleCount = double.tryParse(cameraData['vehicle_count']);
+
+            // Parse vehicle count
+            if (cameraData.containsKey('vehicle_count')) {
+              if (cameraData['vehicle_count'] is num) {
+                vehicleCount = cameraData['vehicle_count'].toDouble();
+              } else if (cameraData['vehicle_count'] is String) {
+                vehicleCount = double.tryParse(cameraData['vehicle_count']) ?? 15.0;
+              }
             }
-            if (cameraData.containsKey('density') && cameraData['density'] is num) {
-              density = cameraData['density'].toDouble();
-            } else if (cameraData.containsKey('density') && cameraData['density'] is String) {
-              density = double.tryParse(cameraData['density']);
+
+            // Parse density
+            if (cameraData.containsKey('density')) {
+              if (cameraData['density'] is num) {
+                density = cameraData['density'].toDouble();
+              } else if (cameraData['density'] is String) {
+                density = double.tryParse(cameraData['density']) ?? 15.0;
+              }
             }
-            source = cameraData['source'] as String?;
-          }
 
-          print('   Camera ${entry.key}: vehicle_count=$vehicleCount, density=$density, source=$source');
-
-          // Handle problematic data
-          if (vehicleCount == 0.0 && source == "default") {
-            print('   ⚠️  Using previous value for ${entry.key} (API returned 0.0 with default source)');
-            vehicleCount = _lastVehicleCounts[entry.key] ?? 15.0;
-          } else if (vehicleCount == null || vehicleCount < 0.0) {
-            print('   ❌ Invalid vehicle count for ${entry.key}, using fallback');
-            vehicleCount = _lastVehicleCounts[entry.key] ?? 15.0;
-          } else if (vehicleCount == 0.0) {
-            print('   ⚠️  Vehicle count is 0.0 from API, using minimum value');
-            vehicleCount = 5.0;
-          }
-
-          if (density == 0.0 && source == "default") {
-            print('   ⚠️  Using previous density value for ${entry.key} (API returned 0.0 with default source)');
-            density = _lastDensities[entry.key] ?? 15.0;
-          } else if (density == null || density < 0.0) {
-            print('   ❌ Invalid density for ${entry.key}, using fallback');
-            density = _lastDensities[entry.key] ?? 15.0;
-          } else if (density == 0.0) {
-            print('   ⚠️  Density is 0.0 from API, using minimum value');
-            density = 5.0;
+            // Handle edge cases
+            if (vehicleCount <= 0) vehicleCount = 5.0; // minimum value
+            if (density <= 0) density = 5.0; // minimum value
           }
 
           newVehicleCounts[entry.key] = vehicleCount;
           newDensities[entry.key] = density;
-          
-          final oldVehicleCount = _lastVehicleCounts[entry.key] ?? 0.0;
-          final oldDensity = _lastDensities[entry.key] ?? 0.0;
-          if (oldVehicleCount != vehicleCount || oldDensity != density) {
-            dataChanged = true;
-            print('   📊 Data changed for camera ${entry.key}: Vehicle count $oldVehicleCount -> $vehicleCount, Density $oldDensity -> $density');
-          }
         }
 
         // Ensure all cameras have data
         final allCameraIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
         for (String cameraId in allCameraIds) {
           if (!newVehicleCounts.containsKey(cameraId)) {
-            final fallbackCount = _lastVehicleCounts[cameraId] ?? 15.0;
-            newVehicleCounts[cameraId] = fallbackCount;
-            print('   ⚠️  Camera $cameraId missing from API, using fallback: $fallbackCount');
+            newVehicleCounts[cameraId] = _lastVehicleCounts[cameraId] ?? 15.0;
           }
           if (!newDensities.containsKey(cameraId)) {
-            final fallbackDensity = _lastDensities[cameraId] ?? 15.0;
-            newDensities[cameraId] = fallbackDensity;
-            print('   ⚠️  Camera $cameraId density missing from API, using fallback: $fallbackDensity');
+            newDensities[cameraId] = _lastDensities[cameraId] ?? 15.0;
           }
         }
 
+        // Update the data
         _lastVehicleCounts = newVehicleCounts;
         _lastDensities = newDensities;
         _usingLiveData = true;
+        _lastSuccessfulFetch = DateTime.now();
 
-        _logApiStatus('_fetchCurrentVehicleCounts', true, additionalInfo: '✅ Successfully fetched and processed live data');
+        _logApiStatus('_fetchCurrentVehicleCounts', true, additionalInfo: '✅ Successfully fetched live data');
         _logDataSource(newVehicleCounts, newDensities, true);
 
-        if (dataChanged && _isNavigating) {
-          print('📱 Triggering polyline update due to data changes');
-          await _updatePolylines();
-        }
-
+        // Notify listeners
         SchedulerBinding.instance.addPostFrameCallback((_) {
           notifyListeners();
         });
-        return;
 
+        return; // Success, exit the retry loop
       } catch (e, stackTrace) {
         attempt++;
         _logApiStatus('_fetchCurrentVehicleCounts', false, additionalInfo: 'Attempt $attempt failed: $e');
-        print('❌ Full error details:');
-        print('   Error: $e');
-        print('   Stack trace: $stackTrace');
-        
+
         if (attempt == maxRetries) {
-          _logApiStatus('_fetchCurrentVehicleCounts', false, additionalInfo: '🔄 Max retries reached, falling back to synthetic data');
+          _logApiStatus('_fetchCurrentVehicleCounts', false,
+              additionalInfo: '🔄 Max retries reached, falling back to synthetic data');
           await _fetchSyntheticVehicleCounts();
         } else {
-          print('⏳ Retrying in ${retryDelay.inSeconds} seconds...');
           await Future.delayed(retryDelay);
         }
       }
     }
-    
+
     SchedulerBinding.instance.addPostFrameCallback((_) {
       notifyListeners();
     });
   }
- Future<void> _fetchSyntheticVehicleCounts() async {
+
+  Future<void> _fetchSyntheticVehicleCounts() async {
     _logApiStatus('_fetchSyntheticVehicleCounts', false, additionalInfo: 'Starting synthetic data fetch');
-    
+
     try {
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/synthetic_traffic_20250609.json');
-      
+
       if (!await file.exists()) {
-        _logApiStatus('_fetchSyntheticVehicleCounts', false, additionalInfo: '❌ Synthetic file not found, using hardcoded defaults');
-        
+        _logApiStatus('_fetchSyntheticVehicleCounts', false,
+            additionalInfo: '❌ Synthetic file not found, using hardcoded defaults');
+
         _lastVehicleCounts = {
-          'A': 15.0, 'B': 20.0, 'C': 15.0, 'D': 15.0, 'E': 15.0, 'F': 15.0,
-          'G': 15.0, 'H': 15.0, 'I': 15.0, 'J': 15.0, 'K': 15.0, 'L': 15.0,
+          'A': 15.0,
+          'B': 20.0,
+          'C': 15.0,
+          'D': 15.0,
+          'E': 15.0,
+          'F': 15.0,
+          'G': 15.0,
+          'H': 15.0,
+          'I': 15.0,
+          'J': 15.0,
+          'K': 15.0,
+          'L': 15.0,
         };
         _lastDensities = {
-          'A': 15.0, 'B': 20.0, 'C': 15.0, 'D': 15.0, 'E': 15.0, 'F': 15.0,
-          'G': 15.0, 'H': 15.0, 'I': 15.0, 'J': 15.0, 'K': 15.0, 'L': 15.0,
+          'A': 15.0,
+          'B': 20.0,
+          'C': 15.0,
+          'D': 15.0,
+          'E': 15.0,
+          'F': 15.0,
+          'G': 15.0,
+          'H': 15.0,
+          'I': 15.0,
+          'J': 15.0,
+          'K': 15.0,
+          'L': 15.0,
         };
         _usingLiveData = false;
-        
+
         _logDataSource(_lastVehicleCounts, _lastDensities, false);
         notifyListeners();
         return;
       }
 
       _logApiStatus('_fetchSyntheticVehicleCounts', false, additionalInfo: '📁 Found synthetic file, processing...');
-      
+
       final content = await file.readAsString();
       final json = jsonDecode(content) as List<dynamic>;
       final now = DateTime.now();
-      
+
       print('🔍 Searching synthetic data for closest timestamp to: ${now.toIso8601String()}');
-      
+
       Map<String, dynamic>? closestEntry;
       Duration minDiff = Duration(days: 1);
 
@@ -1163,7 +1359,8 @@ LatLng? get currentLocation => _currentLocation;
       }
 
       if (closestEntry != null) {
-        print('📊 Found closest synthetic entry: ${closestEntry['timestamp']} (${minDiff.inMinutes} minutes difference)');
+        print(
+            '📊 Found closest synthetic entry: ${closestEntry['timestamp']} (${minDiff.inMinutes} minutes difference)');
       }
 
       // Process synthetic data (rest of your existing logic with enhanced logging)
@@ -1195,36 +1392,55 @@ LatLng? get currentLocation => _currentLocation;
       }
 
       notifyListeners();
-      
     } catch (e, stackTrace) {
       _logApiStatus('_fetchSyntheticVehicleCounts', false, additionalInfo: '❌ Synthetic data fetch failed: $e');
       print('Full synthetic error: $stackTrace');
-      
+
       // Final fallback to hardcoded values
       _lastVehicleCounts = {
-        'A': 15.0, 'B': 20.0, 'C': 15.0, 'D': 15.0, 'E': 15.0, 'F': 15.0,
-        'G': 15.0, 'H': 15.0, 'I': 15.0, 'J': 15.0, 'K': 15.0, 'L': 15.0,
+        'A': 15.0,
+        'B': 20.0,
+        'C': 15.0,
+        'D': 15.0,
+        'E': 15.0,
+        'F': 15.0,
+        'G': 15.0,
+        'H': 15.0,
+        'I': 15.0,
+        'J': 15.0,
+        'K': 15.0,
+        'L': 15.0,
       };
       _lastDensities = {
-        'A': 15.0, 'B': 20.0, 'C': 15.0, 'D': 15.0, 'E': 15.0, 'F': 15.0,
-        'G': 15.0, 'H': 15.0, 'I': 15.0, 'J': 15.0, 'K': 15.0, 'L': 15.0,
+        'A': 15.0,
+        'B': 20.0,
+        'C': 15.0,
+        'D': 15.0,
+        'E': 15.0,
+        'F': 15.0,
+        'G': 15.0,
+        'H': 15.0,
+        'I': 15.0,
+        'J': 15.0,
+        'K': 15.0,
+        'L': 15.0,
       };
       _usingLiveData = false;
-      
+
       _logDataSource(_lastVehicleCounts, _lastDensities, false);
       notifyListeners();
     }
   }
 
-   Future<void> checkApiStatus() async {
+  Future<void> checkApiStatus() async {
     print('🔍 Manual API Status Check Initiated');
-    
+
     try {
       final url = Uri.parse('http://127.0.0.1:10000//live-vehicle-counts');
       print('🌐 Testing connection to: $url');
-      
+
       final response = await http.get(url).timeout(Duration(seconds: 5));
-      
+
       print('📡 API Status Check Results:');
       print('   URL: $url');
       print('   Status Code: ${response.statusCode}');
@@ -1232,7 +1448,7 @@ LatLng? get currentLocation => _currentLocation;
       print('   Response Size: ${response.body.length} bytes');
       print('   Is Success: ${response.statusCode == 200}');
       print('   Current _usingLiveData: $_usingLiveData');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         print('   Data Structure Valid: ${data is Map && data.containsKey('cameras')}');
@@ -1242,7 +1458,6 @@ LatLng? get currentLocation => _currentLocation;
           print('   Camera IDs: ${cameras.keys.join(', ')}');
         }
       }
-      
     } catch (e) {
       print('❌ API Status Check Failed: $e');
       print('   Current _usingLiveData: $_usingLiveData');
@@ -1254,14 +1469,14 @@ LatLng? get currentLocation => _currentLocation;
     print('🔍 === API RESPONSE DEBUG ===');
     print('   Timestamp: ${DateTime.now().toIso8601String()}');
     print('   Data Type: ${data.runtimeType}');
-    
+
     if (data is Map) {
       print('   Top-level keys: ${data.keys.join(', ')}');
       if (data.containsKey('cameras')) {
         final cameras = data['cameras'] as Map;
         print('   Camera count: ${cameras.length}');
         print('   Camera IDs: ${cameras.keys.join(', ')}');
-        
+
         // Sample first camera data
         if (cameras.isNotEmpty) {
           final firstCamera = cameras.entries.first;
@@ -1292,6 +1507,9 @@ LatLng? get currentLocation => _currentLocation;
   }
 
   Future<void> _calculateAndFindShortestPath() async {
+    final totalStartTime = DateTime.now();
+    print('⏱️ A* Path Calculation Started at $totalStartTime');
+
     if (_fromLocation == null || _toLocation == null) {
       print('Cannot calculate shortest path: fromLocation or toLocation is null at ${DateTime.now()}');
       return;
@@ -1299,15 +1517,27 @@ LatLng? get currentLocation => _currentLocation;
 
     final fromCamera = _findNearestCamera(_fromLocation!);
     final toCamera = _findNearestCamera(_toLocation!);
-    print('Calculating shortest path from $fromCamera to $toCamera at ${DateTime.now()}');
+    print('🔍 === A* PATH CALCULATION DEBUG ===');
+    print('📍 From location: $_fromLocation → Nearest camera: $fromCamera');
+    print('📍 To location: $_toLocation → Nearest camera: $toCamera');
+    print(
+        '📊 Graph Size: ${_cameraCoords.length} nodes, ${_cameraDistances?.values.fold(0, (sum, map) => sum + map.length) ?? 0} edges');
 
     if (_cameraDistances == null) {
+      final distanceLoadStart = DateTime.now();
       await _loadCameraDistances();
+      print('⏱️ Distance Loading Took: ${DateTime.now().difference(distanceLoadStart).inMilliseconds}ms');
     }
     if (_maxSpeeds == null) {
+      final speedLoadStart = DateTime.now();
       await _loadMaxSpeeds();
+      print('⏱️ Speed Loading Took: ${DateTime.now().difference(speedLoadStart).inMilliseconds}ms');
     }
 
+    print('📊 Vehicle counts for A* calculation: $_lastVehicleCounts');
+    print('📊 Critical counts: $_criticalVehicleCounts');
+
+    final travelTimesStart = DateTime.now();
     final travelTimes = await compute(
       (Map<String, dynamic> args) {
         return _calculateTravelTimes(
@@ -1324,10 +1554,18 @@ LatLng? get currentLocation => _currentLocation;
         'criticalCounts': _criticalVehicleCounts,
       },
     );
+    print('⏱️ Travel Times Calculation Took: ${DateTime.now().difference(travelTimesStart).inMilliseconds}ms');
 
+    print('⚡ A* algorithm input:');
+    print('   Start: $fromCamera');
+    print('   Goal: $toCamera');
+    print('   Available cameras: ${_cameraCoords.keys.toList()}');
+
+    final aStarStart = DateTime.now();
     final path = await compute(
       (Map<String, dynamic> args) {
-        return _aStar(
+        final aStarInnerStart = DateTime.now();
+        final result = _aStar(
           args['start'] as String,
           args['goal'] as String,
           args['travelTimes'] as Map<String, Map<String, double>>,
@@ -1337,6 +1575,8 @@ LatLng? get currentLocation => _currentLocation;
           args['maxSpeeds'] as Map<String, double>,
           args['criticalCounts'] as Map<String, double>,
         );
+        print('⏱️ [Isolate] A* Inner Execution Took: ${DateTime.now().difference(aStarInnerStart).inMilliseconds}ms');
+        return result;
       },
       {
         'start': fromCamera,
@@ -1349,27 +1589,66 @@ LatLng? get currentLocation => _currentLocation;
         'criticalCounts': _criticalVehicleCounts,
       },
     );
+    print('⏱️ A* Algorithm Took: ${DateTime.now().difference(aStarStart).inMilliseconds}ms');
+
+    print('🎯 A* RESULT:');
+    print('   Raw path from A*: $path');
+    print('   Path length: ${path.length} nodes');
+
+    if (path.length <= 2) {
+      print('⚠️  WARNING: A* only returned ${path.length} nodes - this might be wrong!');
+      print('   Expected: Multiple intermediate camera nodes');
+      print('   Got: Direct path from $fromCamera to $toCamera');
+    } else {
+      print('✅ A* found path through ${path.length} camera nodes:');
+      for (int i = 0; i < path.length; i++) {
+        final camera = path[i];
+        final coord = _cameraCoords[camera];
+        print('   Step ${i + 1}: Camera $camera at $coord');
+      }
+    }
 
     _shortestPath = path;
     _savedVehicleCounts = Map.from(_lastVehicleCounts);
     _savedDensities = Map.from(_lastDensities);
 
+    // Calculate distances and times for each segment
     double totalDistance = 0.0;
     double totalTime = 0.0;
+
+    print('📏 Segment analysis:');
     for (int i = 0; i < path.length - 1; i++) {
       final from = path[i];
       final to = path[i + 1];
-      totalDistance += _cameraDistances![from]![to]!;
-      totalTime += travelTimes[from]![to]!;
+      final segmentDistance = _cameraDistances![from]![to]!;
+      final segmentTime = travelTimes[from]![to]!;
+
+      totalDistance += segmentDistance;
+      totalTime += segmentTime;
+
+      print('   Segment ${i + 1}: $from → $to');
+      print('     Distance: ${segmentDistance.toStringAsFixed(2)} km');
+      print('     Time: ${segmentTime.toStringAsFixed(2)} min');
+      print('     Vehicle count at $from: ${_lastVehicleCounts[from] ?? 0}');
     }
 
     _distance = totalDistance;
     _totalTravelTime = totalTime;
     _estimatedArrival = DateTime.now().add(Duration(minutes: totalTime.round()));
 
-    print('Shortest path: $path, Distance: ${totalDistance.toStringAsFixed(2)} km, Time: ${totalTime.toStringAsFixed(2)} min at ${DateTime.now()}');
+    print('📊 FINAL RESULTS:');
+    print('   Complete path: ${path.join(" → ")}');
+    print('   Total distance: ${totalDistance.toStringAsFixed(2)} km');
+    print('   Total time: ${totalTime.toStringAsFixed(2)} min');
+    print('   ETA: $_estimatedArrival');
 
+    final polylineStart = DateTime.now();
     await _updatePolylines();
+    print('⏱️ Polyline Update Took: ${DateTime.now().difference(polylineStart).inMilliseconds}ms');
+
+    print('⏱️ Total A* Path Calculation Took: ${DateTime.now().difference(totalStartTime).inMilliseconds}ms');
+    print('🔍 === END A* DEBUG ===');
+
     notifyListeners();
   }
 
@@ -1432,16 +1711,36 @@ LatLng? get currentLocation => _currentLocation;
       } else {
         print('Max speeds file not found, using defaults at ${DateTime.now()}');
         _maxSpeeds = {
-          'A': 40.0, 'B': 50.0, 'C': 50.0, 'D': 40.0, 'E': 40.0, 'F': 40.0,
-          'G': 50.0, 'H': 40.0, 'I': 40.0, 'J': 40.0, 'K': 40.0, 'L': 40.0,
+          'A': 40.0,
+          'B': 50.0,
+          'C': 50.0,
+          'D': 40.0,
+          'E': 40.0,
+          'F': 40.0,
+          'G': 50.0,
+          'H': 40.0,
+          'I': 40.0,
+          'J': 40.0,
+          'K': 40.0,
+          'L': 40.0,
         };
         await file.writeAsString(jsonEncode(_maxSpeeds));
       }
     } catch (e) {
       print('Error loading max speeds: $e at ${DateTime.now()}');
       _maxSpeeds = {
-        'A': 40.0, 'B': 40.0, 'C': 40.0, 'D': 40.0, 'E': 40.0, 'F': 40.0,
-        'G': 40.0, 'H': 40.0, 'I': 40.0, 'J': 40.0, 'K': 40.0, 'L': 40.0,
+        'A': 40.0,
+        'B': 40.0,
+        'C': 40.0,
+        'D': 40.0,
+        'E': 40.0,
+        'F': 40.0,
+        'G': 40.0,
+        'H': 40.0,
+        'I': 40.0,
+        'J': 40.0,
+        'K': 40.0,
+        'L': 40.0,
       };
     }
   }
@@ -1454,33 +1753,347 @@ LatLng? get currentLocation => _currentLocation;
       return;
     }
 
+    print('🗺️ === UPDATING POLYLINES WITH DENSITY DEBUG ===');
+    print('Shortest path: $_shortestPath');
+    print('Will create ${_shortestPath.length - 1} polyline segments');
+
+    // Get actual road routes between each pair of cameras
     for (int i = 0; i < _shortestPath.length - 1; i++) {
       final from = _shortestPath[i];
       final to = _shortestPath[i + 1];
       final fromCoord = _cameraCoords[from]!;
       final toCoord = _cameraCoords[to]!;
-      final density = _lastDensities[from] ?? 15.0;
 
+      // Get density and traffic info for this segment
+      final fromDensity = _lastDensities[from] ?? 15.0;
+      final toDensity = _lastDensities[to] ?? 15.0;
+      final fromVehicles = _lastVehicleCounts[from] ?? 0;
+      final toVehicles = _lastVehicleCounts[to] ?? 0;
+      final segmentAvgDensity = (fromDensity + toDensity) / 2;
+
+      print('📍 Segment ${i + 1}: $from → $to');
+      print('   From $from: ${fromVehicles.toStringAsFixed(1)} vehicles, ${fromDensity.toStringAsFixed(1)}% density');
+      print('   To $to: ${toVehicles.toStringAsFixed(1)} vehicles, ${toDensity.toStringAsFixed(1)}% density');
+      print('   Segment avg density: ${segmentAvgDensity.toStringAsFixed(1)}%');
+
+      // Get actual road route between cameras
+      final routePoints = await _getRoadRouteBetweenCameras(fromCoord, toCoord);
+
+      print('✅ Got ${routePoints.length} route points for segment $from → $to');
+      if (routePoints.length <= 2) {
+        print('⚠️  WARNING: Only ${routePoints.length} points - this will be a straight line!');
+      }
+
+      // Determine color based on density (using the FROM camera's density)
       Color color;
-      if (density < 33.3) {
+      String colorDescription;
+      if (segmentAvgDensity  < 33.3) {
         color = Colors.green;
-      } else if (density < 66.6) {
+        colorDescription = "GREEN (Low traffic)";
+      } else if (segmentAvgDensity  < 66.6) {
         color = Colors.yellow;
+        colorDescription = "YELLOW (Moderate traffic)";
       } else {
         color = Colors.red;
+        colorDescription = "RED (High traffic)";
       }
 
       _polylines.add(
         Polyline(
           polylineId: PolylineId('$from-$to'),
-          points: [fromCoord, toCoord],
+          points: routePoints,
           color: color,
           width: 5,
         ),
       );
+
+      print('➕ Added polyline $from-$to:');
+      print('   Points: ${routePoints.length}');
+      print('   Color: $colorDescription');
+      print('   Based on avg density: ${segmentAvgDensity.toStringAsFixed(1)}% between camera $from and $to');
+      print('');
     }
 
-    print('Updated ${_polylines.length} polylines with density-based colors at ${DateTime.now()}');
+    print('🏁 Updated ${_polylines.length} polylines with density-based colors');
+    print('🗺️ === END POLYLINES DEBUG ===');
     notifyListeners();
+  }
+
+// Add this method to your MapModel class to show current traffic conditions
+  void debugCurrentTrafficStatus() {
+    print('🚦 === CURRENT TRAFFIC STATUS ===');
+    print('📅 Data timestamp: ${DateTime.now()}');
+    print('📊 Data source: ${_usingLiveData ? "🟢 LIVE API" : "🔴 SYNTHETIC/FALLBACK"}');
+    print('');
+
+    final allCameras = _cameraCoords.keys.toList()..sort();
+
+    // Create summary statistics
+    final densities = _lastDensities.values.where((d) => d > 0).toList();
+    final avgDensity = densities.isNotEmpty ? densities.reduce((a, b) => a + b) / densities.length : 0;
+    final maxDensity = densities.isNotEmpty ? densities.reduce((a, b) => a > b ? a : b) : 0;
+    final minDensity = densities.isNotEmpty ? densities.reduce((a, b) => a < b ? a : b) : 0;
+
+    print('📈 TRAFFIC SUMMARY:');
+    print('   Average density: ${avgDensity.toStringAsFixed(1)}%');
+    print('   Highest density: ${maxDensity.toStringAsFixed(1)}%');
+    print('   Lowest density: ${minDensity.toStringAsFixed(1)}%');
+    print('');
+
+    print('📍 INDIVIDUAL CAMERA STATUS:');
+
+    for (String camera in allCameras) {
+      final vehicleCount = _lastVehicleCounts[camera] ?? 0;
+      final density = _lastDensities[camera] ?? 0;
+      final criticalCount = _criticalVehicleCounts[camera] ?? 100;
+      final coordinates = _cameraCoords[camera];
+
+      // Calculate capacity utilization
+      final utilization = (vehicleCount / criticalCount * 100).clamp(0, 100);
+
+      // Determine traffic level
+      String trafficLevel;
+      String emoji;
+      if (density < 33.3) {
+        trafficLevel = 'LOW TRAFFIC';
+        emoji = '🟢';
+      } else if (density < 66.6) {
+        trafficLevel = 'MODERATE TRAFFIC';
+        emoji = '🟡';
+      } else {
+        trafficLevel = 'HIGH TRAFFIC';
+        emoji = '🔴';
+      }
+
+      print('   $emoji Camera $camera ($coordinates):');
+      print(
+          '      Vehicles: ${vehicleCount.toStringAsFixed(1)}/${criticalCount.toStringAsFixed(0)} (${utilization.toStringAsFixed(1)}% capacity)');
+      print('      Density: ${density.toStringAsFixed(1)}% - $trafficLevel');
+
+      // Speed calculation for this camera
+      final speed = _greenshieldSpeed(camera, _lastVehicleCounts, _maxSpeeds ?? {}, _criticalVehicleCounts);
+      print('      Estimated speed: ${speed.toStringAsFixed(1)} km/h');
+      print('');
+    }
+
+    // Show cameras sorted by density (worst traffic first)
+    print('🚨 CAMERAS BY TRAFFIC DENSITY (Worst to Best):');
+    final sortedCameras = allCameras.toList()
+      ..sort((a, b) => (_lastDensities[b] ?? 0).compareTo(_lastDensities[a] ?? 0));
+
+    for (int i = 0; i < sortedCameras.length; i++) {
+      final camera = sortedCameras[i];
+      final density = _lastDensities[camera] ?? 0;
+      final vehicles = _lastVehicleCounts[camera] ?? 0;
+      final emoji = density < 33.3
+          ? '🟢'
+          : density < 66.6
+              ? '🟡'
+              : '🔴';
+
+      print(
+          '   ${i + 1}. $emoji Camera $camera: ${density.toStringAsFixed(1)}% (${vehicles.toStringAsFixed(1)} vehicles)');
+    }
+
+    print('🚦 === END TRAFFIC STATUS ===');
+  }
+
+// Also add this method to analyze why A* chose a specific path
+  void analyzePathChoice(List<String> chosenPath) {
+    if (chosenPath.length < 2) return;
+
+    print('🔍 === PATH CHOICE ANALYSIS ===');
+    print('📍 Chosen path: ${chosenPath.join(" → ")}');
+    print('');
+
+    // Analyze each camera in the path
+    double totalPathDensity = 0;
+    double totalPathTime = 0;
+
+    for (int i = 0; i < chosenPath.length; i++) {
+      final camera = chosenPath[i];
+      final density = _lastDensities[camera] ?? 0;
+      final vehicles = _lastVehicleCounts[camera] ?? 0;
+      final speed = _greenshieldSpeed(camera, _lastVehicleCounts, _maxSpeeds ?? {}, _criticalVehicleCounts);
+
+      totalPathDensity += density;
+
+      final emoji = density < 33.3
+          ? '🟢'
+          : density < 66.6
+              ? '🟡'
+              : '🔴';
+      final reason = i == 0
+          ? '(START)'
+          : i == chosenPath.length - 1
+              ? '(END)'
+              : '(INTERMEDIATE)';
+
+      print('   $emoji Step ${i + 1}: Camera $camera $reason');
+      print('      Traffic: ${vehicles.toStringAsFixed(1)} vehicles, ${density.toStringAsFixed(1)}% density');
+      print('      Speed: ${speed.toStringAsFixed(1)} km/h');
+
+      if (i < chosenPath.length - 1) {
+        final nextCamera = chosenPath[i + 1];
+        final distance = _cameraDistances?[camera]?[nextCamera] ?? 0;
+        final time = distance > 0 ? (distance / speed) * 60 : 0; // Convert to minutes
+        totalPathTime += time;
+        print('      → Next: ${distance.toStringAsFixed(2)} km to $nextCamera (${time.toStringAsFixed(1)} min)');
+      }
+      print('');
+    }
+
+    final avgPathDensity = chosenPath.isNotEmpty ? totalPathDensity / chosenPath.length : 0;
+
+    print('📊 PATH SUMMARY:');
+    print('   Average density along path: ${avgPathDensity.toStringAsFixed(1)}%');
+    print('   Total estimated time: ${totalPathTime.toStringAsFixed(1)} minutes');
+    print(
+        '   Path quality: ${avgPathDensity < 33.3 ? "EXCELLENT 🟢" : avgPathDensity < 66.6 ? "GOOD 🟡" : "CONGESTED 🔴"}');
+
+    print('🔍 === END PATH ANALYSIS ===');
+  }
+
+  Future<List<LatLng>> _getRoadRouteBetweenCameras(LatLng from, LatLng to) async {
+    print('🛣️  === GETTING ROAD ROUTE DEBUG ===');
+    print('From: $from');
+    print('To: $to');
+
+    try {
+      final graphHopperService = GraphHopperService();
+      print('📡 Calling GraphHopper API...');
+
+      final routeData = await graphHopperService.getRoute(from, to, _selectedVehicle);
+
+      print('📦 GraphHopper response keys: ${routeData.keys.toList()}');
+      print('📦 GraphHopper response: $routeData');
+
+      // Handle the points correctly - don't cast directly
+      final pointsData = routeData['points'];
+      print('📍 Raw points data type: ${pointsData.runtimeType}');
+      print('📍 Raw points data: $pointsData');
+
+      List<LatLng> points = [];
+
+      if (pointsData != null) {
+        if (pointsData is List<LatLng>) {
+          // Already correct type
+          points = pointsData;
+          print('✅ Points already in correct format: ${points.length} points');
+        } else if (pointsData is List) {
+          // Convert from List<dynamic> to List<LatLng>
+          points = pointsData.map((point) {
+            if (point is LatLng) {
+              return point;
+            } else if (point is Map) {
+              // Handle case where points might be maps with lat/lng
+              return LatLng(
+                (point['lat'] ?? point['latitude']) as double,
+                (point['lng'] ?? point['longitude']) as double,
+              );
+            } else if (point is List && point.length >= 2) {
+              // Handle case where points are [lng, lat] arrays
+              return LatLng(point[1] as double, point[0] as double);
+            } else {
+              throw Exception('Unknown point format: ${point.runtimeType} - $point');
+            }
+          }).toList();
+          print('✅ Converted ${pointsData.length} points to LatLng format');
+        }
+      }
+
+      if (points.isNotEmpty && points.length > 2) {
+        print('✅ SUCCESS: Returning ${points.length} route points');
+        // Print first few points for debugging
+        for (int i = 0; i < (points.length > 3 ? 3 : points.length); i++) {
+          print('   Point $i: ${points[i]}');
+        }
+        if (points.length > 3) {
+          print('   ... and ${points.length - 3} more points');
+        }
+        return points;
+      } else {
+        print('❌ No valid points returned from GraphHopper (got ${points.length} points)');
+      }
+    } catch (e, stackTrace) {
+      print('💥 ERROR getting road route from $from to $to: $e');
+      print('Stack trace: $stackTrace');
+    }
+
+    print('🔄 FALLBACK: Using interpolated route instead of straight line');
+    print('🛣️  === END ROAD ROUTE DEBUG ===');
+
+    // Instead of straight line, create a more realistic curved route
+    return _createInterpolatedRoute(from, to);
+  }
+
+// Add this helper method to create a curved route instead of straight line
+  List<LatLng> _createInterpolatedRoute(LatLng start, LatLng end) {
+    final points = <LatLng>[];
+    const numPoints = 8; // Number of intermediate points
+
+    // Add start point
+    points.add(start);
+
+    // Calculate the difference
+    final latDiff = end.latitude - start.latitude;
+    final lngDiff = end.longitude - start.longitude;
+    final distance = sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+    // Add intermediate points with slight curve to simulate road following
+    for (int i = 1; i < numPoints; i++) {
+      final t = i / numPoints;
+
+      // Linear interpolation
+      final lat = start.latitude + (latDiff * t);
+      final lng = start.longitude + (lngDiff * t);
+
+      // Add slight curve based on distance (longer routes get more curve)
+      final curveIntensity = distance * 0.5; // Adjust this value for more/less curve
+      final curve = sin(t * pi) * curveIntensity * 0.001;
+
+      // Alternate the curve direction for more natural look
+      final curveLat = lat + (i % 2 == 0 ? curve : -curve);
+      final curveLng = lng + (i % 2 == 1 ? curve : -curve);
+
+      points.add(LatLng(curveLat, curveLng));
+    }
+
+    // Add end point
+    points.add(end);
+
+    print('📍 Created interpolated route with ${points.length} points');
+    return points;
+  }
+
+// Add this method to your MapModel class to test .env loading
+  Future<void> debugEnvironmentVariables() async {
+    print('🔍 === DEBUGGING ENVIRONMENT VARIABLES ===');
+
+    try {
+      // Check if dotenv is loaded
+      print('📁 Checking dotenv loading...');
+      print('📁 Available env keys: ${dotenv.env.keys.toList()}');
+
+      // Check GraphHopper key specifically
+      final graphHopperKey = dotenv.env['GRAPH_HOPPER_API_KEY'];
+      print('🔑 GRAPH_HOPPER_API_KEY from dotenv: ${graphHopperKey ?? "NOT FOUND"}');
+
+      if (graphHopperKey != null) {
+        print('✅ GraphHopper API key found: ${graphHopperKey.substring(0, 8)}...');
+      } else {
+        print('❌ GraphHopper API key NOT FOUND in environment variables');
+        print('🔍 All available env vars: ${dotenv.env}');
+      }
+
+      // Test GraphHopper service directly
+      final graphHopperService = GraphHopperService();
+      print(
+          '🔧 GraphHopper service API key: ${graphHopperService.apiKey.isEmpty ? "EMPTY" : graphHopperService.apiKey.substring(0, 8) + "..."}');
+    } catch (e) {
+      print('💥 Error checking environment variables: $e');
+    }
+
+    print('🔍 === END ENV DEBUG ===');
   }
 }

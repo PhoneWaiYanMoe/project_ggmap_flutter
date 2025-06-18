@@ -7,7 +7,7 @@ import 'src/services/language_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await dotenv.load(fileName: '.env', isOptional: true);
+    await dotenv.load(fileName: '.env', isOptional: false);
   } catch (e) {
     print('Failed to load .env file: $e');
   }

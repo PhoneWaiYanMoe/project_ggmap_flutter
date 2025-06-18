@@ -4,12 +4,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GraphHopperService {
-  final String apiKey = dotenv.env['GRAPH_HOPPER_API_KEY'] ?? '';
+  final String apiKey ='bcdfef4c-16ec-4dfb-8326-77919e378c0f';
   static const int _requestsPerMinute = 20; // Free tier limit (adjust based on your plan)
   static const Duration _delayBetweenRequests = Duration(milliseconds: (60 * 1000) ~/ _requestsPerMinute); // 3000ms delay
   static DateTime _lastRequestTime = DateTime.now().subtract(Duration(minutes: 1));
   static int _requestCount = 0;
-
+ 
   // Helper method to enforce rate limiting
   Future<void> _enforceRateLimit() async {
     final now = DateTime.now();
